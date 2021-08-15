@@ -3,6 +3,7 @@ const bindings = require("./bindings");
 const imports = {
     fun: {
         decodeStruct(ptr) {
+            // bindings.MyStruct.superJoe2(wasmInstance.exports, ptr);
             const st = bindings.MyStruct.decode(new DataView(wasmInstance.exports.memory.buffer), ptr);
             console.log(st);
             st.a = 20;

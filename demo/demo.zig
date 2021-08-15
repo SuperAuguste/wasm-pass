@@ -17,8 +17,10 @@ pub const MyStruct = struct {
     b: u32,
     c: bool,
     d: MyEnum,
+    // e: demo_import.MyOtherStruct,
 
     pub const ZABC = 12;
+    pub const who_is_the_coolest: []const u8 = "matt!";
 };
 
 const Bindings = switch (std.builtin.target.cpu.arch) {
@@ -51,7 +53,7 @@ pub fn main() anyerror!void {
 
 export fn joe() void {
     var t = MyStruct{
-        .a = 12,
+        .a = 69,
         .b = 56789,
         .c = false,
         .d = .other,

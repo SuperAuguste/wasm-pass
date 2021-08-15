@@ -14,7 +14,7 @@ pub fn printLiteral(comptime tp_store: *TPStore, writer: anytype, value: anytype
     const T = @TypeOf(value);
     switch (T) {
         type => try printType(tp_store, writer, value),
-        []const u8 => try writer.print("\"{s}\""), // TODO: Escape strings (probably use "`" and replace `s)
+        []const u8 => try writer.print("\"{any}\"", .{std.zig.fmtEscapes(value)}),
         else => switch (@typeInfo(T)) {
             .Int, .ComptimeInt => try writer.print("{d}", .{value}),
             .Fn => _ = try writer.writeAll(
@@ -26,7 +26,7 @@ pub fn printLiteral(comptime tp_store: *TPStore, writer: anytype, value: anytype
 }
 
 pub fn printConst(comptime tp_store: *TPStore, writer: anytype, comptime name: []const u8, value: anytype) anyerror!void {
-    std.log.debug("Generating constant {s} ({})...", .{ name, value });
+    std.log.debug("Generating constant {s} ({any})...", .{ name, value });
     try writer.print("static {s} = ", .{name});
     try printLiteral(tp_store, writer, value);
     _ = try writer.writeAll(";\n");
