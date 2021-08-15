@@ -57,7 +57,8 @@ fn printDecode(comptime tp_store: *TPStore, comptime T: type, writer: anytype, o
             }
         },
         .Bool => try writer.print("dataView.getUint8(offset + {d}) != 0", .{offset}),
-        .Enum => try writer.print("{s}.decode(dataView, offset + {d})", .{ tp_store.getTypePath(T), offset }),
+        .Enum, .Struct => try writer.print("{s}.decode(dataView, offset + {d})", .{ tp_store.getTypePath(T), offset }),
+        // .Struct => try writer.print("{s}.decode(dataView, offset + {d})", .{ tp_store.getTypePath(T), offset }),
         else => @compileError("Unimplemented: " ++ @typeName(T)),
     }
 }
@@ -73,7 +74,7 @@ fn printEncode(comptime T: type, comptime field_name: []const u8, writer: anytyp
             }
         },
         .Bool => try writer.print("dataView.setUint8(offset + {d}, this.{s} === true ? 1 : 0)", .{ offset, field_name }),
-        .Enum => try writer.print("this.{s}.encode(dataView, offset + {d})", .{ field_name, offset }),
+        .Enum, .Struct => try writer.print("this.{s}.encode(dataView, offset + {d})", .{ field_name, offset }),
         else => @compileError("Unimplemented: " ++ @typeName(T)),
     }
 }

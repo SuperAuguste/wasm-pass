@@ -17,7 +17,7 @@ pub const MyStruct = struct {
     b: u32,
     c: bool,
     d: MyEnum,
-    // e: demo_import.MyOtherStruct,
+    e: demo_import.MyOtherStruct,
 
     pub const ZABC = 12;
     pub const who_is_the_coolest: []const u8 = "matt!";
@@ -57,6 +57,7 @@ export fn joe() void {
         .b = 56789,
         .c = false,
         .d = .other,
+        .e = .{ .abc = 123 },
     };
     Bindings.decodeStruct(@intCast(i32, @ptrToInt(&t)));
     Bindings.decodeStruct2(@intCast(i32, @ptrToInt(&t)));
