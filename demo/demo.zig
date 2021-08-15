@@ -8,6 +8,8 @@ pub const MyEnum = enum(u8) {
     joe,
     mama,
     other,
+
+    pub const ZABCD = 12;
 };
 
 pub const MyStruct = struct {

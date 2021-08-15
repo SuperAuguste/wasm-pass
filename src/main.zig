@@ -81,6 +81,7 @@ fn printEncode(comptime T: type, comptime field_name: []const u8, writer: anytyp
 fn printEnum(comptime tp_store: *TPStore, writer: anytype, comptime T: type, comptime info: std.builtin.TypeInfo.Enum) !void {
     try writer.print("class {s} extends Enum {{\n", .{@typeName(T)});
     try printMeta(T, writer);
+    try printChildren(tp_store, writer, T);
     inline for (info.fields) |field| {
         try writer.print("static {s} = ce({s}, {d});\n", .{ field.name, @typeName(T), field.value });
     }
