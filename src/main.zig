@@ -3,57 +3,80 @@
 
 const std = @import("std");
 
+const AutoIndentingStream = @import("auto_indenting_stream.zig").AutoIndentingStream;
+
 const pre = @embedFile("pre.js");
 const post = @embedFile("post.js");
 
-fn getByteCount(bits: u16) u16 {
-    return @floatToInt(u16, std.math.pow(f64, 2, std.math.ceil(std.math.log(f64, 2, @intToFloat(f64, bits) / 8))));
+const Stream = AutoIndentingStream(std.fs.File.Writer);
+const Writer = Stream.Writer;
+
+fn getBitCount(bits: u16) u16 {
+    return std.math.ceilPowerOfTwo(u16, bits) catch unreachable;
 }
 
-pub fn printLiteral(comptime tp_store: *TPStore, writer: anytype, value: anytype) anyerror!void {
+const AssignmentState = struct {
+    is_object: bool = false,
+    is_class: bool = false,
+};
+
+pub fn printConst(comptime tp_store: *TPStore, writer: Writer, value: anytype, comptime name: []const u8, state: AssignmentState) anyerror!void {
     const T = @TypeOf(value);
+
+    std.log.debug("Generating constant {s} ({s})...", .{ name, @typeName(T) });
+
+    if (state.is_class) {
+        try writer.print("static {s} = ", .{name});
+    } else if (state.is_object) {
+        try writer.print("{s}: ", .{name});
+    } else {
+        try writer.print("const {s} = ", .{name});
+    }
+
     switch (T) {
         type => try printType(tp_store, writer, value),
-        []const u8 => try writer.print("\"{any}\"", .{std.zig.fmtEscapes(value)}),
+        []const u8 => try writer.print("\"{}\"", .{std.zig.fmtEscapes(value)}),
         else => switch (@typeInfo(T)) {
-            .Int, .ComptimeInt => try writer.print("{d}", .{value}),
+            .Int, .ComptimeInt, .Float, .ComptimeFloat => try writer.print("{d}", .{value}),
             .Fn => _ = try writer.writeAll(
                 \\() => new Error("Functions not implemented!")
             ),
-            else => @compileError("printLiteral not implemented for: " ++ @typeName(T)),
+            else => @compileError("printConst not implemented for: " ++ @typeName(T)),
         },
+    }
+
+    if (state.is_object) {
+        try writer.writeAll(",");
+    } else {
+        try writer.writeAll(";");
     }
 }
 
-pub fn printConst(comptime tp_store: *TPStore, writer: anytype, comptime name: []const u8, value: anytype) anyerror!void {
-    std.log.debug("Generating constant {s} ({any})...", .{ name, value });
-    try writer.print("static {s} = ", .{name});
-    try printLiteral(tp_store, writer, value);
-    _ = try writer.writeAll(";\n");
-}
-
-fn printMeta(comptime T: type, writer: anytype) !void {
+fn printMeta(comptime T: type, writer: Writer) !void {
     try writer.print("static meta = {{size: {d}}};\n", .{@sizeOf(T)});
 }
 
-fn printTypeJS(comptime T: type, writer: anytype) !void {
+fn typeNameJs(comptime tp_store: *TPStore, comptime T: type) []const u8 {
     const info = @typeInfo(T);
 
-    switch (info) {
-        .Int => _ = try writer.writeAll("number"),
-        .Bool => _ = try writer.writeAll("boolean"),
-        else => _ = try writer.writeAll(@typeName(T)),
-    }
+    return switch (info) {
+        .Int, .ComptimeInt, .Float, .ComptimeFloat => "number",
+        .Bool => "boolean",
+        else => tp_store.getTypePath(T),
+    };
 }
 
-fn printDecode(comptime tp_store: *TPStore, comptime T: type, writer: anytype, offset: usize) !void {
+fn printDecode(comptime tp_store: *TPStore, comptime T: type, writer: Writer, offset: usize) !void {
     const info = @typeInfo(T);
 
     switch (info) {
         .Int => |int| {
+            const bits = getBitCount(int.bits);
+            const endian = if (bits == 8) "" else ", true";
+
             switch (int.signedness) {
-                .signed => try writer.print("dataView.getInt{d}(offset + {d}, true)", .{ getByteCount(int.bits) * 8, offset }),
-                .unsigned => try writer.print("dataView.getUint{d}(offset + {d}, true)", .{ getByteCount(int.bits) * 8, offset }),
+                .signed => try writer.print("dataView.getInt{d}(offset + {d}{s})", .{ bits, offset, endian }),
+                .unsigned => try writer.print("dataView.getUint{d}(offset + {d}{s})", .{ bits, offset, endian }),
             }
         },
         .Bool => try writer.print("dataView.getUint8(offset + {d}) != 0", .{offset}),
@@ -63,14 +86,17 @@ fn printDecode(comptime tp_store: *TPStore, comptime T: type, writer: anytype, o
     }
 }
 
-fn printEncode(comptime T: type, comptime field_name: []const u8, writer: anytype, offset: usize) !void {
+fn printEncode(comptime T: type, comptime field_name: []const u8, writer: Writer, offset: usize) !void {
     const info = @typeInfo(T);
 
     switch (info) {
         .Int => |int| {
+            const bits = getBitCount(int.bits);
+            const endian = if (bits == 8) "" else ", true";
+
             switch (int.signedness) {
-                .signed => try writer.print("dataView.setInt{d}(offset + {d}, this.{s}, true)", .{ getByteCount(int.bits) * 8, offset, field_name }),
-                .unsigned => try writer.print("dataView.setUint{d}(offset + {d}, this.{s}, true)", .{ getByteCount(int.bits) * 8, offset, field_name }),
+                .signed => try writer.print("dataView.setInt{d}(offset + {d}, this.{s}{s})", .{ bits, offset, field_name, endian }),
+                .unsigned => try writer.print("dataView.setUint{d}(offset + {d}, this.{s}{s})", .{ bits, offset, field_name, endian }),
             }
         },
         .Bool => try writer.print("dataView.setUint8(offset + {d}, this.{s} === true ? 1 : 0)", .{ offset, field_name }),
@@ -79,112 +105,165 @@ fn printEncode(comptime T: type, comptime field_name: []const u8, writer: anytyp
     }
 }
 
-fn printEnum(comptime tp_store: *TPStore, writer: anytype, comptime T: type, comptime info: std.builtin.TypeInfo.Enum) !void {
+fn printEnum(comptime tp_store: *TPStore, writer: Writer, comptime T: type) !void {
+    const info = @typeInfo(T).Enum;
+
+    writer.context.pushIndent();
+
+    try writer.context.insertNewline();
+    try writer.writeAll("/**\n");
+    try writer.print(" * @alias {s}\n", .{tp_store.getTypePath(T)});
+    try writer.writeAll(" */\n");
+
     try writer.print("class {s} extends Enum {{\n", .{@typeName(T)});
+    writer.context.pushIndent();
+
     try printMeta(T, writer);
-    try printChildren(tp_store, writer, T);
+    try printDeclarations(tp_store, writer, T, .{ .is_class = true });
+
+    try writer.context.insertNewline();
+
     inline for (info.fields) |field| {
         try writer.print("static {s} = ce({s}, {d});\n", .{ field.name, @typeName(T), field.value });
     }
-    try writer.print(
-        \\
-        \\/**
-        \\ * Decodes a `{s}`
-        \\ * @param {{DataView}} dataView DataView representing WASM memory
-        \\ * @param {{number}} offset The offset at which the struct starts
-        \\ * @returns {{{s}}}
-        \\ */
-        \\static decode(dataView, offset = 0) {{
-        \\return this.from(
-    , .{ @typeName(T), @typeName(T) });
+
+    try writer.context.insertNewline();
+
+    try writer.writeAll("/**\n");
+    try writer.print(" * Decodes a `{s}`\n", .{@typeName(T)});
+    try writer.writeAll(" * @param {DataView} dataView DataView representing WASM memory\n");
+    try writer.writeAll(" * @param {number} offset The offset at which the struct starts\n");
+    try writer.print(" * @returns {{{s}}} offset The offset at which the struct starts\n", .{@typeName(T)});
+    try writer.writeAll(" */\n");
+    try writer.writeAll("static decode(dataView, offset = 0) {\n");
+    writer.context.pushIndent();
+
+    try writer.writeAll("return this.from(");
     try printDecode(tp_store, info.tag_type, writer, 0);
-    try writer.print(
-        \\);
-        \\}}
-        \\
-        \\/**
-        \\ * Encodes a `{s}`
-        \\ * @param {{DataView}} dataView DataView representing WASM memory
-        \\ * @param {{number}} offset The offset at which the struct starts
-        \\ * @returns {{{s}}}
-        \\ */
-        \\encode(dataView, offset = 0) {{
-        \\
-    , .{ @typeName(T), @typeName(T) });
+    try writer.writeAll(");\n");
+
+    writer.context.popIndent();
+    try writer.writeAll("}\n");
+
+    try writer.context.insertNewline();
+
+    try writer.writeAll("/**\n");
+    try writer.print(" * Encodes a `{s}`\n", .{@typeName(T)});
+    try writer.writeAll(" * @param {DataView} dataView DataView representing WASM memory\n");
+    try writer.writeAll(" * @param {number} offset The offset at which the struct starts\n");
+    try writer.writeAll(" */\n");
+    try writer.writeAll("encode(dataView, offset = 0) {\n");
+    writer.context.pushIndent();
+
     try printEncode(info.tag_type, "value", writer, 0);
-    _ = try writer.writeAll(
-        \\
-        \\}
-        \\}
-        \\
-    );
+    try writer.context.insertNewline();
+
+    writer.context.popIndent();
+    try writer.writeAll("}\n");
+
+    writer.context.popIndent();
+    _ = try writer.writeAll("}");
+
+    writer.context.popIndent();
 }
 
-fn printStruct(comptime tp_store: *TPStore, writer: anytype, comptime T: type, comptime info: std.builtin.TypeInfo.Struct) !void {
-    try writer.print("class {s} extends Struct {{\n", .{@typeName(T)});
-    try printMeta(T, writer);
-    try printChildren(tp_store, writer, T);
-    inline for (info.fields) |field| {
-        try writer.print("/**\n * @type {{", .{});
-        try printTypeJS(field.field_type, writer);
-        try writer.print("}} {s}\n */\n{s};", .{ @typeName(field.field_type), field.name });
-        _ = try writer.writeAll("\n");
+fn printStruct(comptime tp_store: *TPStore, writer: Writer, comptime T: type) !void {
+    const info = @typeInfo(T).Struct;
+
+    writer.context.pushIndent();
+    if (info.fields.len > 0) {
+        try writer.context.insertNewline();
+        try writer.writeAll("/**\n");
+        try writer.print(" * @alias {s}\n", .{tp_store.getTypePath(T)});
+        try writer.writeAll(" */\n");
+
+        try writer.print("class {s} extends Struct {{\n", .{@typeName(T)});
+        writer.context.pushIndent();
+
+        try printMeta(T, writer);
+        try printDeclarations(tp_store, writer, T, .{ .is_class = true });
+
+        try writer.context.insertNewline();
+
+        inline for (info.fields) |field| {
+            try writer.print("/** @type {{{s}}} {s} */\n", .{ typeNameJs(tp_store, field.field_type), @typeName(field.field_type) });
+            try writer.print("{s};\n", .{field.name});
+            try writer.context.insertNewline();
+        }
+
+        try writer.writeAll("/**\n");
+        try writer.print(" * Decodes a `{s}`\n", .{@typeName(T)});
+        try writer.writeAll(" * @param {DataView} dataView DataView representing WASM memory\n");
+        try writer.writeAll(" * @param {number} offset The offset at which the struct starts\n");
+        try writer.print(" * @returns {{{s}}} offset The offset at which the struct starts\n", .{@typeName(T)});
+        try writer.writeAll(" */\n");
+        try writer.writeAll("static decode(dataView, offset = 0) {\n");
+        writer.context.pushIndent();
+
+        try writer.writeAll("const obj = new this();\n");
+
+        inline for (info.fields) |field| {
+            try writer.print("obj.{s} = ", .{field.name});
+            try printDecode(tp_store, field.field_type, writer, @offsetOf(T, field.name));
+            _ = try writer.writeAll(";\n");
+        }
+
+        _ = try writer.writeAll("return obj;\n");
+
+        writer.context.popIndent();
+        _ = try writer.writeAll("}\n");
+
+        try writer.context.insertNewline();
+
+        try writer.writeAll("/**\n");
+        try writer.print(" * Encodes a `{s}`\n", .{@typeName(T)});
+        try writer.writeAll(" * @param {DataView} dataView DataView representing WASM memory\n");
+        try writer.writeAll(" * @param {number} offset The offset at which the struct starts\n");
+        try writer.writeAll(" */\n");
+        try writer.writeAll("encode(dataView, offset = 0) {\n");
+        writer.context.pushIndent();
+
+        inline for (info.fields) |field| {
+            try printEncode(field.field_type, field.name, writer, @offsetOf(T, field.name));
+            _ = try writer.writeAll(";\n");
+        }
+
+        writer.context.popIndent();
+        _ = try writer.writeAll("}\n");
+    } else {
+        try writer.context.insertNewline();
+        try writer.writeAll("/**\n");
+        try writer.print(" * @namespace {s}\n", .{tp_store.getTypePath(T)});
+        try writer.writeAll(" */\n");
+
+        try writer.writeAll("{\n");
+        writer.context.pushIndent();
+
+        try printDeclarations(tp_store, writer, T, .{ .is_object = true });
     }
-    _ = try writer.print(
-        \\/**
-        \\ * Decodes a `{s}`
-        \\ * @param {{DataView}} dataView DataView representing WASM memory
-        \\ * @param {{number}} offset The offset at which the struct starts
-        \\ * @returns {{{s}}}
-        \\ */
-        \\static decode(dataView, offset = 0) {{
-        \\const obj = new this();
-        \\
-    , .{ @typeName(T), @typeName(T) });
-    inline for (info.fields) |field| {
-        try writer.print("obj.{s} = ", .{field.name});
-        try printDecode(tp_store, field.field_type, writer, @offsetOf(T, field.name));
-        _ = try writer.writeAll(";\n");
-    }
-    _ = try writer.writeAll("return obj;\n}\n");
-    _ = try writer.print(
-        \\
-        \\/**
-        \\ * Encodes a `{s}`
-        \\ * @param {{DataView}} dataView DataView representing WASM memory
-        \\ * @param {{number}} offset The offset at which the struct starts
-        \\ * @returns {{{s}}}
-        \\ */
-        \\encode(dataView, offset = 0) {{
-        \\
-    , .{ @typeName(T), @typeName(T) });
-    inline for (info.fields) |field| {
-        try printEncode(field.field_type, field.name, writer, @offsetOf(T, field.name));
-        _ = try writer.writeAll(";\n");
-    }
-    _ = try writer.writeAll(
-        \\
-        \\}
-        \\}
-        \\
-    );
+
+    writer.context.popIndent();
+    _ = try writer.writeAll("}");
+
+    writer.context.popIndent();
 }
 
 /// Generate constants within type
-pub fn printChildren(comptime tp_store: *TPStore, writer: anytype, comptime T: type) anyerror!void {
+pub fn printDeclarations(comptime tp_store: *TPStore, writer: Writer, comptime T: type, state: AssignmentState) anyerror!void {
     inline for (std.meta.declarations(T)) |decl| {
         if (decl.is_pub) {
-            try printConst(tp_store, writer, decl.name, @field(T, decl.name));
+            try printConst(tp_store, writer, @field(T, decl.name), decl.name, state);
+            try writer.context.insertNewline();
         }
     }
 }
 
-pub fn printType(comptime tp_store: *TPStore, writer: anytype, comptime T: type) anyerror!void {
+pub fn printType(comptime tp_store: *TPStore, writer: Writer, comptime T: type) anyerror!void {
     std.log.debug("Generating type {s}...", .{@typeName(T)});
 
     switch (@typeInfo(T)) {
-        .Struct => |struct_info| try printStruct(tp_store, writer, T, struct_info),
-        .Enum => |enum_info| try printEnum(tp_store, writer, T, enum_info),
+        .Struct => try printStruct(tp_store, writer, T),
+        .Enum => try printEnum(tp_store, writer, T),
         else => {},
     }
 }
@@ -192,16 +271,26 @@ pub fn printType(comptime tp_store: *TPStore, writer: anytype, comptime T: type)
 // Type "absolute path" resolution
 const TPEntry = struct { T: type, path: []const u8 };
 const TPStore = struct {
-    type_paths: anytype,
+    type_paths: []const TPEntry = &[_]TPEntry{},
 
-    pub fn resolveTypes(comptime self: *TPStore, comptime prefix: []const u8, comptime T: type) void {
+    pub fn resolveType(comptime self: *TPStore, comptime T: type) void {
+        const path = @typeName(T);
+        const name = path[0 .. std.mem.lastIndexOfScalar(u8, path, '.') orelse path.len];
+
+        self.type_paths = self.type_paths ++ &[_]TPEntry{.{ .T = T, .path = name }};
+
+        self.resolveTypeRecursive(name, T);
+    }
+
+    pub fn resolveTypeRecursive(comptime self: *TPStore, comptime prefix: []const u8, comptime T: type) void {
         comptime for (std.meta.declarations(T)) |decl| {
             if (decl.is_pub) {
                 switch (decl.data) {
                     .Type => {
-                        var z = [1]TPEntry{.{ .T = @field(T, decl.name), .path = prefix ++ "." ++ decl.name }};
-                        self.type_paths = self.type_paths ++ z;
-                        self.resolveTypes(prefix ++ "." ++ decl.name, @field(T, decl.name));
+                        const path = prefix ++ "." ++ decl.name;
+                        self.type_paths = self.type_paths ++ &[_]TPEntry{.{ .T = @field(T, decl.name), .path = path }};
+
+                        self.resolveTypeRecursive(path, @field(T, decl.name));
                     },
                     else => {},
                 }
@@ -220,15 +309,23 @@ const TPStore = struct {
     }
 };
 
-pub fn bind(namespace: anytype, writer: anytype) anyerror!void {
-    comptime var type_paths = [0]TPEntry{};
-    comptime var tp_store = TPStore{ .type_paths = type_paths };
-    comptime tp_store.resolveTypes(@typeName(namespace), namespace);
+pub fn bind(namespace: anytype, writer: std.fs.File.Writer) anyerror!void {
+    comptime var tp_store = TPStore{};
+    comptime tp_store.resolveType(namespace);
 
-    _ = try writer.writeAll(pre);
-    try printType(tp_store, writer, namespace);
-    try writer.print("module.exports = {s};\n", .{@typeName(namespace)});
-    _ = try writer.writeAll(post);
+    var ais = Stream{
+        .indent_delta = 4,
+        .underlying_writer = writer,
+    };
+    const writer2 = ais.writer();
+
+    _ = try writer2.writeAll(pre);
+    try printConst(&tp_store, writer2, namespace, @typeName(namespace), .{});
+    try ais.insertNewline();
+    try ais.insertNewline();
+
+    try writer2.print("module.exports = {s};\n", .{@typeName(namespace)});
+    _ = try writer2.writeAll(post);
 }
 
 pub fn wasmExports(namespace: anytype) type {
