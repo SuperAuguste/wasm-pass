@@ -111,9 +111,6 @@ fn printEnum(comptime tp_store: *TPStore, writer: Writer, comptime T: type) !voi
     writer.context.pushIndent();
 
     try writer.context.insertNewline();
-    try writer.writeAll("/**\n");
-    try writer.print(" * @alias {s}\n", .{tp_store.getTypePath(T)});
-    try writer.writeAll(" */\n");
 
     try writer.print("class {s} extends Enum {{\n", .{@typeName(T)});
     writer.context.pushIndent();
@@ -124,16 +121,16 @@ fn printEnum(comptime tp_store: *TPStore, writer: Writer, comptime T: type) !voi
     try writer.context.insertNewline();
 
     inline for (info.fields) |field| {
-        try writer.print("static {s} = ce({s}, {d});\n", .{ field.name, @typeName(T), field.value });
+        try writer.print("static {s} = createEnumValue({s}, {d});\n", .{ field.name, @typeName(T), field.value });
     }
 
     try writer.context.insertNewline();
 
     try writer.writeAll("/**\n");
-    try writer.print(" * Decodes a `{s}`\n", .{@typeName(T)});
+    try writer.print(" * Decodes a {{@link {s}}}\n", .{@typeName(T)});
     try writer.writeAll(" * @param {DataView} dataView DataView representing WASM memory\n");
     try writer.writeAll(" * @param {number} offset The offset at which the struct starts\n");
-    try writer.print(" * @returns {{{s}}} offset The offset at which the struct starts\n", .{@typeName(T)});
+    try writer.print(" * @returns {{{s}}}\n", .{@typeName(T)});
     try writer.writeAll(" */\n");
     try writer.writeAll("static decode(dataView, offset = 0) {\n");
     writer.context.pushIndent();
@@ -148,7 +145,7 @@ fn printEnum(comptime tp_store: *TPStore, writer: Writer, comptime T: type) !voi
     try writer.context.insertNewline();
 
     try writer.writeAll("/**\n");
-    try writer.print(" * Encodes a `{s}`\n", .{@typeName(T)});
+    try writer.print(" * Encodes a {{@link {s}}}\n", .{@typeName(T)});
     try writer.writeAll(" * @param {DataView} dataView DataView representing WASM memory\n");
     try writer.writeAll(" * @param {number} offset The offset at which the struct starts\n");
     try writer.writeAll(" */\n");
@@ -165,6 +162,21 @@ fn printEnum(comptime tp_store: *TPStore, writer: Writer, comptime T: type) !voi
     _ = try writer.writeAll("}");
 
     writer.context.popIndent();
+}
+
+fn printUndefined(comptime tp_store: *TPStore, writer: Writer, field: std.builtin.TypeInfo.StructField) !void {
+    switch (@typeInfo(field.field_type)) {
+        .Int, .Float => try writer.print("0x{x}", .{
+            @bitCast(field.field_type, [1]u8{0xAA} ** @sizeOf(field.field_type)),
+        }),
+        .Bool => _ = try writer.writeAll("false"),
+        .Enum => |e| try writer.print("{s}.from(0x{x})", .{
+            tp_store.getTypePath(field.field_type),
+            @bitCast(e.tag_type, [1]u8{0xAA} ** @sizeOf(field.field_type)),
+        }),
+        .Struct => try writer.print("new {s}()", .{tp_store.getTypePath(field.field_type)}),
+        else => @compileError("printUndefined not implemented for " ++ @typeName(field.field_type)),
+    }
 }
 
 fn printStruct(comptime tp_store: *TPStore, writer: Writer, comptime T: type) !void {
@@ -186,16 +198,18 @@ fn printStruct(comptime tp_store: *TPStore, writer: Writer, comptime T: type) !v
         try writer.context.insertNewline();
 
         inline for (info.fields) |field| {
-            try writer.print("/** @type {{{s}}} {s} */\n", .{ typeNameJs(tp_store, field.field_type), @typeName(field.field_type) });
-            try writer.print("{s};\n", .{field.name});
+            try writer.print("/** Zig type: {s} */\n", .{@typeName(field.field_type)});
+            try writer.print("{s} = ", .{field.name});
+            try printUndefined(tp_store, writer, field);
+            _ = try writer.writeAll(";\n");
             try writer.context.insertNewline();
         }
 
         try writer.writeAll("/**\n");
-        try writer.print(" * Decodes a `{s}`\n", .{@typeName(T)});
+        try writer.print(" * Decodes a {{@link {s}}}\n", .{@typeName(T)});
         try writer.writeAll(" * @param {DataView} dataView DataView representing WASM memory\n");
         try writer.writeAll(" * @param {number} offset The offset at which the struct starts\n");
-        try writer.print(" * @returns {{{s}}} offset The offset at which the struct starts\n", .{@typeName(T)});
+        try writer.print(" * @returns {{{s}}}\n", .{@typeName(T)});
         try writer.writeAll(" */\n");
         try writer.writeAll("static decode(dataView, offset = 0) {\n");
         writer.context.pushIndent();
@@ -216,7 +230,7 @@ fn printStruct(comptime tp_store: *TPStore, writer: Writer, comptime T: type) !v
         try writer.context.insertNewline();
 
         try writer.writeAll("/**\n");
-        try writer.print(" * Encodes a `{s}`\n", .{@typeName(T)});
+        try writer.print(" * Encodes a {{@link {s}}}\n", .{@typeName(T)});
         try writer.writeAll(" * @param {DataView} dataView DataView representing WASM memory\n");
         try writer.writeAll(" * @param {number} offset The offset at which the struct starts\n");
         try writer.writeAll(" */\n");
@@ -232,10 +246,6 @@ fn printStruct(comptime tp_store: *TPStore, writer: Writer, comptime T: type) !v
         _ = try writer.writeAll("}\n");
     } else {
         try writer.context.insertNewline();
-        try writer.writeAll("/**\n");
-        try writer.print(" * @namespace {s}\n", .{tp_store.getTypePath(T)});
-        try writer.writeAll(" */\n");
-
         try writer.writeAll("{\n");
         writer.context.pushIndent();
 
