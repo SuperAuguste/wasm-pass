@@ -1,5 +1,8 @@
 const std = @import("std");
 
+const template = @embedFile("template/template.js");
+const binding_marker = "/// BINDINGS";
+
 const AutoIndentingStream = @import("auto_indenting_stream.zig").AutoIndentingStream;
 
 const Stream = AutoIndentingStream(std.fs.File.Writer);
@@ -73,8 +76,29 @@ pub const BindingGenerator = struct {
         comptime var store = TypeStore{};
         comptime store.resolveType(T);
 
+        try self.emitPreamble();
+
+        self.stream.pushIndent();
         try self.emitDeclaration(store, comptime store.getTypeName(T), T);
         try self.stream.insertNewline();
+        try self.stream.insertNewline();
+
+        try self.emitDeclarationRaw("bindings", comptime store.getTypeName(T));
+        try self.emitPostamble();
+    }
+
+    fn emitPreamble(self: *BindingGenerator) !void {
+        const replacement_pos = std.mem.indexOf(u8, template, binding_marker) orelse unreachable;
+        const writer = self.stream.writer();
+
+        try writer.writeAll(template[0..replacement_pos]);
+    }
+
+    fn emitPostamble(self: *BindingGenerator) !void {
+        const replacement_pos = std.mem.indexOf(u8, template, binding_marker) orelse unreachable;
+        const writer = self.stream.writer();
+
+        try writer.writeAll(template[replacement_pos + binding_marker.len ..]);
     }
 
     fn jsTypeOf(comptime store: TypeStore, comptime T: type) []const u8 {
@@ -153,6 +177,7 @@ pub const BindingGenerator = struct {
             return;
         }
 
+        const has_args = info.args.len > 0;
         const has_return = info.return_type.? != void and info.return_type.? != noreturn;
 
         try self.stream.insertNewline();
@@ -161,26 +186,27 @@ pub const BindingGenerator = struct {
         try writer.writeAll("/**");
         try self.stream.insertNewline();
 
-        try writer.writeAll(" * @param {WebAssembly.Instance} instance");
-        try self.stream.insertNewline();
+        if (has_args or has_return) {
+            inline for (info.args) |arg, i| {
+                try writer.print(" * @param {{{s}}} arg{d}", .{ jsTypeOf(store, arg.arg_type.?), i });
+                try self.stream.insertNewline();
+            }
 
-        inline for (info.args) |arg, i| {
-            try writer.print(" * @param {{{s}}} arg{d}", .{ jsTypeOf(store, arg.arg_type.?), i });
-            try self.stream.insertNewline();
-        }
-
-        if (has_return) {
-            try writer.print(" * @returns {{{s}}}", .{jsTypeOf(store, info.return_type.?)});
-            try self.stream.insertNewline();
+            if (has_return) {
+                try writer.print(" * @returns {{{s}}}", .{jsTypeOf(store, info.return_type.?)});
+                try self.stream.insertNewline();
+            }
         }
 
         try writer.writeAll(" */");
         try self.stream.insertNewline();
 
-        try writer.writeAll("function(instance");
+        try writer.writeAll("function (");
 
         inline for (info.args) |_, i| {
-            try writer.print(", arg{d}", .{i});
+            if (i != 0) try writer.writeAll(", ");
+
+            try writer.print("arg{d}", .{i});
         }
 
         try writer.writeAll(") {");
@@ -199,7 +225,7 @@ pub const BindingGenerator = struct {
             try writer.print("arg{d}", .{i});
         }
 
-        try writer.writeAll(")");
+        try writer.writeAll(");");
         try self.stream.insertNewline();
 
         self.stream.popIndent();
@@ -229,6 +255,29 @@ pub const BindingGenerator = struct {
             try writer.writeAll(";");
         }
     }
+
+    fn emitDeclarationRaw(self: *BindingGenerator, comptime name: []const u8, comptime value: []const u8) !void {
+        const writer = self.stream.writer();
+
+        std.log.debug("Generating declaration: {s}...", .{name});
+
+        if (self.state.is_class) {
+            try writer.writeAll("static " ++ name ++ " = ");
+        } else if (self.state.is_object) {
+            try writer.writeAll(name ++ ": ");
+        } else {
+            try writer.writeAll("const " ++ name ++ " = ");
+        }
+
+        try writer.writeAll(value);
+
+        if (self.state.is_object) {
+            try writer.writeAll(",");
+        } else {
+            try writer.writeAll(";");
+        }
+    }
+
 
     fn emitDeclarations(self: *BindingGenerator, comptime store: TypeStore, comptime T: type) !void {
         inline for (std.meta.declarations(T)) |decl| {
@@ -266,30 +315,75 @@ pub const BindingGenerator = struct {
         try self.emitDeclarations(store, T);
         try self.stream.insertNewline();
 
+        try writer.writeAll("static values = {");
+        try self.stream.insertNewline();
+        self.stream.pushIndent();
+
         inline for (std.meta.fields(T)) |field| {
-            try writer.print("static {s} = createEnumValue(" ++ name ++ ", {d});", .{ field.name, field.value });
+            try writer.print("{s}: createEnumValue(" ++ name ++ ", {d}),", .{ field.name, field.value });
+            try self.stream.insertNewline();
+        }
+
+        self.stream.popIndent();
+        try writer.writeAll("}");
+        try self.stream.insertNewline();
+
+        try self.stream.insertNewline();
+
+        {
+            try writer.writeAll("/**");
+            try self.stream.insertNewline();
+
+            try writer.writeAll(" * @param {number} value");
+            try self.stream.insertNewline();
+
+            try writer.print(" * @returns {{{s}}}", .{name});
+            try self.stream.insertNewline();
+
+            try writer.writeAll(" */");
+            try self.stream.insertNewline();
+
+            try writer.writeAll("static from(value) {");
+            try self.stream.insertNewline();
+            self.stream.pushIndent();
+
+            try writer.writeAll("return super.from(value);");
+            try self.stream.insertNewline();
+            self.stream.popIndent();
+
+            _ = try writer.writeAll("}");
             try self.stream.insertNewline();
         }
 
         try self.stream.insertNewline();
-        try writer.print("/** @returns {{{s}}} */\n", .{name});
-        _ = try writer.writeAll("static from(value) {\n");
-        self.stream.pushIndent();
-        _ = try writer.writeAll("return super.from(value);\n");
-        self.stream.popIndent();
-        _ = try writer.writeAll("}\n\n");
 
-        _ = try writer.writeAll("static decode(offset = 0) {\n");
-        self.stream.pushIndent();
-        try writer.print("return this.from(getDataView().getUint{d}(offset, true));\n", .{@sizeOf(T) * 8});
-        self.stream.popIndent();
-        _ = try writer.writeAll("}\n\n");
+        {
+            _ = try writer.writeAll("static decode(offset = 0) {");
+            try self.stream.insertNewline();
+            self.stream.pushIndent();
 
-        _ = try writer.writeAll("encode(offset = 0) {\n");
-        self.stream.pushIndent();
-        try writer.print("getDataView().setUint{d}(offset, this.value, true);\n", .{@sizeOf(T) * 8});
-        self.stream.popIndent();
-        _ = try writer.writeAll("}\n");
+            try writer.print("return this.from(getDataView().getUint{d}(offset, true));", .{@sizeOf(T) * 8});
+            try self.stream.insertNewline();
+
+            self.stream.popIndent();
+            _ = try writer.writeAll("}");
+            try self.stream.insertNewline();
+        }
+
+        try self.stream.insertNewline();
+
+        {
+            _ = try writer.writeAll("encode(offset = 0) {");
+            try self.stream.insertNewline();
+            self.stream.pushIndent();
+
+            try writer.print("getDataView().setUint{d}(offset, this.value, true);", .{@sizeOf(T) * 8});
+            try self.stream.insertNewline();
+
+            self.stream.popIndent();
+            _ = try writer.writeAll("}");
+            try self.stream.insertNewline();
+        }
 
         self.stream.popIndent();
         try writer.writeAll("}");

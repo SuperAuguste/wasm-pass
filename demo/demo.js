@@ -9,7 +9,7 @@ const imports = {
             st.a = 20;
             st.b = 420;
             st.c = true;
-            st.d = bindings.MyEnum.mama;
+            st.d = bindings.MyEnum.from("mama");
 
             st.encode(ptr);
             console.log(st);
@@ -18,8 +18,8 @@ const imports = {
         decodeStruct2(ptr) {
             const st = bindings.MyStruct.decode(ptr);
             console.log(st);
-        }
-    }
+        },
+    },
 };
 
 const wasmModule = new WebAssembly.Module(require("fs").readFileSync(require("path").join(__dirname, "../zig-out/lib/demo.wasm")));
