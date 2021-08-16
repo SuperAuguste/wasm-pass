@@ -215,15 +215,15 @@ pub const BindingGenerator = struct {
         self.stream.popIndent();
         _ = try writer.writeAll("}\n\n");
 
-        _ = try writer.writeAll("static decode(view, offset = 0) {\n");
+        _ = try writer.writeAll("static decode(offset = 0) {\n");
         self.stream.pushIndent();
-        try writer.print("return this.from(view.getUint{d}(offset, true));\n", .{@sizeOf(T) * 8});
+        try writer.print("return this.from(getDataView().getUint{d}(offset, true));\n", .{@sizeOf(T) * 8});
         self.stream.popIndent();
         _ = try writer.writeAll("}\n\n");
 
-        _ = try writer.writeAll("encode(view, offset = 0) {\n");
+        _ = try writer.writeAll("encode(offset = 0) {\n");
         self.stream.pushIndent();
-        try writer.print("view.setUint{d}(offset, this.value, true);\n", .{@sizeOf(T) * 8});
+        try writer.print("getDataView().setUint{d}(offset, this.value, true);\n", .{@sizeOf(T) * 8});
         self.stream.popIndent();
         _ = try writer.writeAll("}\n");
 
@@ -311,7 +311,7 @@ pub const BindingGenerator = struct {
         try writer.writeAll(" */");
         try self.stream.insertNewline();
 
-        try writer.writeAll("encode(view, offset = 0) {");
+        try writer.writeAll("encode(offset = 0) {");
         try self.stream.insertNewline();
         self.stream.pushIndent();
 
@@ -334,34 +334,34 @@ pub const BindingGenerator = struct {
                     switch (info.bits) {
                         0 => {},
                         8 => switch (info.signedness) {
-                            .signed => try writer.print("view.setInt8(" ++ offset ++ ", this.{s});", .{field.name}),
-                            .unsigned => try writer.print("view.setUint8(" ++ offset ++ ", this.{s});", .{field.name}),
+                            .signed => try writer.print("getDataView().setInt8(" ++ offset ++ ", this.{s});", .{field.name}),
+                            .unsigned => try writer.print("getDataView().setUint8(" ++ offset ++ ", this.{s});", .{field.name}),
                         },
                         16 => switch (info.signedness) {
-                            .signed => try writer.print("view.setInt16(" ++ offset ++ ", this.{s}, true);", .{field.name}),
-                            .unsigned => try writer.print("view.setUint16(" ++ offset ++ ", this.{s}, true);", .{field.name}),
+                            .signed => try writer.print("getDataView().setInt16(" ++ offset ++ ", this.{s}, true);", .{field.name}),
+                            .unsigned => try writer.print("getDataView().setUint16(" ++ offset ++ ", this.{s}, true);", .{field.name}),
                         },
                         32 => switch (info.signedness) {
-                            .signed => try writer.print("view.setInt32(" ++ offset ++ ", this.{s}, true);", .{field.name}),
-                            .unsigned => try writer.print("view.setUint32(" ++ offset ++ ", this.{s}, true);", .{field.name}),
+                            .signed => try writer.print("getDataView().setInt32(" ++ offset ++ ", this.{s}, true);", .{field.name}),
+                            .unsigned => try writer.print("getDataView().setUint32(" ++ offset ++ ", this.{s}, true);", .{field.name}),
                         },
                         64 => switch (info.signedness) {
-                            .signed => try writer.print("view.setBigInt8(" ++ offset ++ ", this.{s}, true);", .{field.name}),
-                            .unsigned => try writer.print("view.setBigUint64(" ++ offset ++ ", this.{s}, true);", .{field.name}),
+                            .signed => try writer.print("getDataView().setBigInt8(" ++ offset ++ ", this.{s}, true);", .{field.name}),
+                            .unsigned => try writer.print("getDataView().setBigUint64(" ++ offset ++ ", this.{s}, true);", .{field.name}),
                         },
                         else => @compileError("unsupported integer size"),
                     }
                 },
                 .Float => |info| {
                     switch (info.bits) {
-                        32 => try writer.print("view.setFloat32(" ++ offset ++ ", this.{s});", .{field.name}),
-                        64 => try writer.print("view.setFloat64(" ++ offset ++ ", this.{s});", .{field.name}),
+                        32 => try writer.print("getDataView().setFloat32(" ++ offset ++ ", this.{s});", .{field.name}),
+                        64 => try writer.print("getDataView().setFloat64(" ++ offset ++ ", this.{s});", .{field.name}),
                         else => @compileError("unsupported float size"),
                     }
                 },
-                .Bool => try writer.print("view.setUint8(" ++ offset ++ ", this.{s} === true ? 1 : 0);", .{field.name}),
+                .Bool => try writer.print("getDataView().setUint8(" ++ offset ++ ", this.{s} === true ? 1 : 0);", .{field.name}),
                 .Enum, .Struct => {
-                    if (@bitSizeOf(T) > 0) try writer.print("this.{s}.encode(view, " ++ offset ++ ");", .{field.name});
+                    if (@bitSizeOf(T) > 0) try writer.print("this.{s}.encode(" ++ offset ++ ");", .{field.name});
                 },
                 else => @compileError("cannot encode: " ++ @typeName(T)),
             }
@@ -392,7 +392,7 @@ pub const BindingGenerator = struct {
         try writer.writeAll(" */");
         try self.stream.insertNewline();
 
-        try writer.writeAll("static decode(view, offset = 0) {");
+        try writer.writeAll("static decode(offset = 0) {");
         try self.stream.insertNewline();
         self.stream.pushIndent();
 
@@ -420,34 +420,34 @@ pub const BindingGenerator = struct {
                     switch (info.bits) {
                         0 => {},
                         8 => switch (info.signedness) {
-                            .signed => try writer.writeAll("view.getInt8(" ++ offset ++ ");"),
-                            .unsigned => try writer.writeAll("view.getUint8(" ++ offset ++ ");"),
+                            .signed => try writer.writeAll("getDataView().getInt8(" ++ offset ++ ");"),
+                            .unsigned => try writer.writeAll("getDataView().getUint8(" ++ offset ++ ");"),
                         },
                         16 => switch (info.signedness) {
-                            .signed => try writer.writeAll("view.getInt16(" ++ offset ++ ", true);"),
-                            .unsigned => try writer.writeAll("view.getUint16(" ++ offset ++ ", true);"),
+                            .signed => try writer.writeAll("getDataView().getInt16(" ++ offset ++ ", true);"),
+                            .unsigned => try writer.writeAll("getDataView().getUint16(" ++ offset ++ ", true);"),
                         },
                         32 => switch (info.signedness) {
-                            .signed => try writer.writeAll("view.getInt32(" ++ offset ++ ", true);"),
-                            .unsigned => try writer.writeAll("view.getUint32(" ++ offset ++ ", true);"),
+                            .signed => try writer.writeAll("getDataView().getInt32(" ++ offset ++ ", true);"),
+                            .unsigned => try writer.writeAll("getDataView().getUint32(" ++ offset ++ ", true);"),
                         },
                         64 => switch (info.signedness) {
-                            .signed => try writer.writeAll("view.getBigInt8(" ++ offset ++ ", true);"),
-                            .unsigned => try writer.writeAll("view.getBigUint64(" ++ offset ++ ", true);"),
+                            .signed => try writer.writeAll("getDataView().getBigInt8(" ++ offset ++ ", true);"),
+                            .unsigned => try writer.writeAll("getDataView().getBigUint64(" ++ offset ++ ", true);"),
                         },
                         else => @compileError("unsupported integer size"),
                     }
                 },
                 .Float => |info| {
                     switch (info.bits) {
-                        32 => try writer.writeAll("view.getFloat32(" ++ offset ++ ");"),
-                        64 => try writer.writeAll("view.getFloat64(" ++ offset ++ ");"),
+                        32 => try writer.writeAll("getDataView().getFloat32(" ++ offset ++ ");"),
+                        64 => try writer.writeAll("getDataView().getFloat64(" ++ offset ++ ");"),
                         else => @compileError("unsupported float size"),
                     }
                 },
-                .Bool => try writer.writeAll("view.getUint8(" ++ offset ++ ") !== 0;"),
+                .Bool => try writer.writeAll("getDataView().getUint8(" ++ offset ++ ") !== 0;"),
                 .Enum, .Struct => {
-                    if (@bitSizeOf(T) > 0) try writer.print("{s}.decode(view, " ++ offset ++ ");", .{store.getTypePath(field.field_type)});
+                    if (@bitSizeOf(T) > 0) try writer.print("{s}.decode(" ++ offset ++ ");", .{store.getTypePath(field.field_type)});
                 },
                 else => @compileError("cannot decode: " ++ @typeName(T)),
             }

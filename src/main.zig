@@ -18,6 +18,11 @@ pub fn bind(namespace: anytype, writer: std.fs.File.Writer) anyerror!void {
         \\ * @param {WebAssembly.Instance} instance
         \\ */
         \\module.exports = function bind(instance) {
+        \\    let dataView = new DataView(instance.exports.memory.buffer);
+        \\    function getDataView() {
+        \\        if (dataView.buffer.byteLength === 0) {dataView = new DataView(instance.exports.memory.buffer)} // Detached buffer (resizes cause this)
+        \\        return dataView;
+        \\    }
         \\
     );
     bindgen.stream.pushIndent();
