@@ -302,9 +302,6 @@ pub const BindingGenerator = struct {
         try writer.writeAll("/** Encodes a {@link " ++ store.getTypeName(T) ++ "}");
         try self.stream.insertNewline();
 
-        try writer.writeAll(" * @param {DataView} view DataView representing WASM memory");
-        try self.stream.insertNewline();
-
         try writer.writeAll(" * @param {number} offset The offset at which the struct starts");
         try self.stream.insertNewline();
 
@@ -378,9 +375,6 @@ pub const BindingGenerator = struct {
         const writer = self.stream.writer();
 
         try writer.writeAll("/** Decodes a {@link " ++ store.getTypeName(T) ++ "}");
-        try self.stream.insertNewline();
-
-        try writer.writeAll(" * @param {DataView} view DataView representing WASM memory");
         try self.stream.insertNewline();
 
         try writer.writeAll(" * @param {number} offset The offset at which the struct starts");
