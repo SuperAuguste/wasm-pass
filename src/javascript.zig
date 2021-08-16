@@ -86,9 +86,7 @@ pub const BindingGenerator = struct {
         };
     }
 
-    fn emitAny(self: *BindingGenerator, comptime store: TypeStore, value: anytype) !void {
-        const writer = self.stream.writer();
-
+    fn emitAny(self: *BindingGenerator, comptime store: TypeStore, comptime name: []const u8, value: anytype) !void {
         const T = @TypeOf(value);
         const info = @typeInfo(T);
 
@@ -102,7 +100,7 @@ pub const BindingGenerator = struct {
                 .Bool => {
                     try self.emitBoolean(value);
                 },
-                .Fn => try writer.writeAll("() => new Error('Functions not implemented')"),
+                .Fn => try self.emitFunction(store, name, value),
                 else => |e| @compileError("bindings for type " ++ @tagName(e) ++ " not implemented"),
             },
         }
@@ -144,6 +142,72 @@ pub const BindingGenerator = struct {
         try writer.print("\"{}\"", .{std.zig.fmtEscapes(value)});
     }
 
+    fn emitFunction(self: *BindingGenerator, comptime store: TypeStore, comptime name: []const u8, func: anytype) !void {
+        const writer = self.stream.writer();
+
+        const T = @TypeOf(func);
+        const info = @typeInfo(T).Fn;
+
+        if (info.calling_convention != .C or info.return_type == null) {
+            try writer.writeAll("() => new Error('Function uses invalid call convention')");
+            return;
+        }
+
+        const has_return = info.return_type.? != void and info.return_type.? != noreturn;
+
+        try self.stream.insertNewline();
+        self.stream.pushIndent();
+
+        try writer.writeAll("/**");
+        try self.stream.insertNewline();
+
+        try writer.writeAll(" * @param {WebAssembly.Instance} instance");
+        try self.stream.insertNewline();
+
+        inline for (info.args) |arg, i| {
+            try writer.print(" * @param {{{s}}} arg{d}", .{ jsTypeOf(store, arg.arg_type.?), i });
+            try self.stream.insertNewline();
+        }
+
+        if (has_return) {
+            try writer.print(" * @returns {{{s}}}", .{jsTypeOf(store, info.return_type.?)});
+            try self.stream.insertNewline();
+        }
+
+        try writer.writeAll(" */");
+        try self.stream.insertNewline();
+
+        try writer.writeAll("function(instance");
+
+        inline for (info.args) |_, i| {
+            try writer.print(", arg{d}", .{i});
+        }
+
+        try writer.writeAll(") {");
+        try self.stream.insertNewline();
+        self.stream.pushIndent();
+
+        if (has_return) {
+            try writer.writeAll("return ");
+        }
+
+        try writer.writeAll("instance.exports." ++ name ++ "(");
+
+        inline for (info.args) |_, i| {
+            if (i != 0) try writer.writeAll(", ");
+
+            try writer.print("arg{d}", .{i});
+        }
+
+        try writer.writeAll(")");
+        try self.stream.insertNewline();
+
+        self.stream.popIndent();
+        try writer.writeAll("}");
+
+        self.stream.popIndent();
+    }
+
     fn emitDeclaration(self: *BindingGenerator, comptime store: TypeStore, comptime name: []const u8, value: anytype) !void {
         const writer = self.stream.writer();
 
@@ -157,7 +221,7 @@ pub const BindingGenerator = struct {
             try writer.writeAll("const " ++ name ++ " = ");
         }
 
-        try self.emitAny(store, value);
+        try self.emitAny(store, name, value);
 
         if (self.state.is_object) {
             try writer.writeAll(",");
