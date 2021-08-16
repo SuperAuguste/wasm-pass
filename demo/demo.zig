@@ -12,7 +12,7 @@ pub const MyEnum = enum(u8) {
     pub const ZABCD = 12;
 };
 
-pub const MyStruct = struct {
+pub const MyStruct = extern struct {
     a: u8,
     b: u32,
     c: bool,
