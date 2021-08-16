@@ -41,7 +41,6 @@ class Enum {
 
     /**
      * @param {number} value
-     * @returns {Enum}
      */
     static from(value) {
         for (const tag of Object.values(this).slice(1)) {

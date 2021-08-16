@@ -207,6 +207,26 @@ pub const BindingGenerator = struct {
             try self.stream.insertNewline();
         }
 
+        try self.stream.insertNewline();
+        try writer.print("/** @returns {{{s}}} */\n", .{name});
+        _ = try writer.writeAll("static from(value) {\n");
+        self.stream.pushIndent();
+        _ = try writer.writeAll("return super.from(value);\n");
+        self.stream.popIndent();
+        _ = try writer.writeAll("}\n\n");
+
+        _ = try writer.writeAll("static decode(view, offset = 0) {\n");
+        self.stream.pushIndent();
+        try writer.print("return this.from(view.getUint{d}(offset, true));\n", .{@sizeOf(T) * 8});
+        self.stream.popIndent();
+        _ = try writer.writeAll("}\n\n");
+
+        _ = try writer.writeAll("encode(view, offset = 0) {\n");
+        self.stream.pushIndent();
+        try writer.print("view.setUint{d}(offset, this.value, true);\n", .{@sizeOf(T) * 8});
+        self.stream.popIndent();
+        _ = try writer.writeAll("}\n");
+
         self.stream.popIndent();
         try writer.writeAll("}");
 
@@ -427,7 +447,7 @@ pub const BindingGenerator = struct {
                 },
                 .Bool => try writer.writeAll("view.getUint8(" ++ offset ++ ") !== 0;"),
                 .Enum, .Struct => {
-                    if (@bitSizeOf(T) > 0) try writer.print("this.{s}.decode(view, " ++ offset ++ ");", .{field.name});
+                    if (@bitSizeOf(T) > 0) try writer.print("{s}.decode(view, " ++ offset ++ ");", .{store.getTypePath(field.field_type)});
                 },
                 else => @compileError("cannot decode: " ++ @typeName(T)),
             }

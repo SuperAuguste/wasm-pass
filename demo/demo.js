@@ -1,5 +1,3 @@
-const bindings = require("./bindings");
-
 const imports = {
     fun: {
         decodeStruct(ptr) {
@@ -23,8 +21,7 @@ const imports = {
 
 const wasmModule = new WebAssembly.Module(require("fs").readFileSync(require("path").join(__dirname, "../zig-out/lib/demo.wasm")));
 const wasmInstance = new WebAssembly.Instance(wasmModule, imports);
-// console.log(bindings.Allocator);
-const allocator = new bindings.Allocator(wasmInstance.exports);
+const bindings = require("./bindings")(wasmInstance);
 
 // console.log(wasmInstance.exports);
 
