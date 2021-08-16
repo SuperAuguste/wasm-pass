@@ -1,2 +1,2 @@
 pub const abc = 12;
-pub const MyOtherStruct = struct { abc: u16 };
+pub const MyOtherStruct = extern struct { abc: u16 };
