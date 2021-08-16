@@ -65,3 +65,9 @@ export fn joe() void {
     Bindings.decodeStruct(@intCast(i32, @ptrToInt(&t)));
     Bindings.decodeStruct2(@intCast(i32, @ptrToInt(&t)));
 }
+
+pub export fn joe2(name: u16, num: f64) u16 {
+    _ = num;
+
+    return name;
+}
