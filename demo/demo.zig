@@ -18,6 +18,7 @@ pub const MyStruct = extern struct {
     c: bool,
     d: MyEnum,
     e: demo_import.MyOtherStruct,
+    f: *i16,
 
     pub const ZABC = 12;
     pub const who_is_the_coolest: []const u8 = "matt!";
@@ -52,12 +53,14 @@ pub fn main() anyerror!void {
 }
 
 export fn joe() void {
+    var z: i16 = 420;
     var t = MyStruct{
         .a = 69,
         .b = 56789,
         .c = false,
         .d = .other,
         .e = .{ .abc = 123 },
+        .f = &z,
     };
     Bindings.decodeStruct(@intCast(i32, @ptrToInt(&t)));
     Bindings.decodeStruct2(@intCast(i32, @ptrToInt(&t)));

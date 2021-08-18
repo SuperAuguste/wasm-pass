@@ -285,10 +285,15 @@ pub const BindingGenerator = struct {
     fn emitUndefinedInit(self: *BindingGenerator, comptime store: TypeStore, comptime T: type) !void {
         const writer = self.stream.writer();
 
-        const Int = std.meta.Int(.unsigned, @sizeOf(T) * 8);
-        const aaaa = @bitCast(Int, [1]u8{0xaa} ** @sizeOf(T));
+        const size = switch (@typeInfo(T)) {
+            .Pointer => 4,
+            else => @sizeOf(T),
+        };
+        const Int = std.meta.Int(.unsigned, size * 8);
+        const aaaa = @bitCast(Int, [1]u8{0xaa} ** size);
+
         switch (@typeInfo(T)) {
-            .Int, .Float => try writer.print("0x{x}", .{aaaa}),
+            .Int, .Float, .Pointer => try writer.print("0x{x}", .{aaaa}), // TODO: Consider making a `Pointer` type
             .Bool => try writer.writeAll("false"),
             .Enum => try writer.print(store.getTypePath(T) ++ ".from(0x{x})", .{aaaa}),
             .Struct => try writer.writeAll("new " ++ store.getTypePath(T) ++ "()"),
@@ -324,6 +329,9 @@ pub const BindingGenerator = struct {
             };
 
             switch (field_info) {
+                .Pointer => {
+                    try writer.print("getDataView().setUint32(" ++ offset ++ ", this.{s}, true);", .{field.name});
+                },
                 .Int => |info| {
                     // TODO: figure out how to calculate where padding will be
                     // const bits = getBitCount(int.bits);
@@ -343,7 +351,7 @@ pub const BindingGenerator = struct {
                             .unsigned => try writer.print("getDataView().setUint32(" ++ offset ++ ", this.{s}, true);", .{field.name}),
                         },
                         64 => switch (info.signedness) {
-                            .signed => try writer.print("getDataView().setBigInt8(" ++ offset ++ ", this.{s}, true);", .{field.name}),
+                            .signed => try writer.print("getDataView().setBigInt64(" ++ offset ++ ", this.{s}, true);", .{field.name}),
                             .unsigned => try writer.print("getDataView().setBigUint64(" ++ offset ++ ", this.{s}, true);", .{field.name}),
                         },
                         else => @compileError("unsupported integer size"),
@@ -407,6 +415,7 @@ pub const BindingGenerator = struct {
             try writer.print("obj.{s} = ", .{field.name});
 
             switch (field_info) {
+                .Pointer => try writer.writeAll("getDataView().getUint32(" ++ offset ++ ", true);"),
                 .Int => |info| {
                     // TODO: figure out how to calculate where padding will be
                     // const bits = getBitCount(int.bits);
@@ -426,7 +435,7 @@ pub const BindingGenerator = struct {
                             .unsigned => try writer.writeAll("getDataView().getUint32(" ++ offset ++ ", true);"),
                         },
                         64 => switch (info.signedness) {
-                            .signed => try writer.writeAll("getDataView().getBigInt8(" ++ offset ++ ", true);"),
+                            .signed => try writer.writeAll("getDataView().getBigInt64(" ++ offset ++ ", true);"),
                             .unsigned => try writer.writeAll("getDataView().getBigUint64(" ++ offset ++ ", true);"),
                         },
                         else => @compileError("unsupported integer size"),
