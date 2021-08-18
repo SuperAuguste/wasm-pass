@@ -1,10 +1,14 @@
 const imports = {
     fun: {
         decodeStruct(ptr) {
-            const st = bindings.MyStruct.decode(ptr);
-            console.log(st);
+            let st = bindings.MyStruct.decode(ptr);
+            console.log("Struct decoded from Zig", st);
 
-            console.log("The value is", new DataView(wasmInstance.exports.memory.buffer).getUint16(st.f, true));
+            console.log("Value pointed to by `f` is", new DataView(wasmInstance.exports.memory.buffer).getUint16(st.f, true));
+
+            bindings.joeManipulatesStructFromZig(ptr);
+            st = bindings.MyStruct.decode(ptr);
+            console.log("Struct after being manipulated by Zig", st);
 
             st.a = 20;
             st.b = 420;
@@ -17,7 +21,7 @@ const imports = {
 
         decodeStruct2(ptr) {
             const st = bindings.MyStruct.decode(ptr);
-            console.log(st);
+            console.log("Final decode", st);
         },
     },
 };
@@ -28,4 +32,3 @@ const wasmInstance = new WebAssembly.Instance(wasmModule, imports);
 const bindings = require("./bindings")(wasmInstance);
 
 bindings.joe();
-// wasmInstance.exports.joe();

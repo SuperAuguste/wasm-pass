@@ -26,15 +26,15 @@ pub const MyStruct = extern struct {
 
 const Bindings = switch (std.builtin.target.cpu.arch) {
     .wasm32, .wasm64 => struct {
-        extern "fun" fn decodeStruct(ptr: i32) void;
-        extern "fun" fn decodeStruct2(ptr: i32) void;
+        extern "fun" fn decodeStruct(ptr: *MyStruct) void;
+        extern "fun" fn decodeStruct2(ptr: *MyStruct) void;
     },
     else => struct {
-        fn decodeStruct(ptr: i32) void {
+        fn decodeStruct(ptr: *MyStruct) void {
             _ = ptr;
         }
 
-        fn decodeStruct2(ptr: i32) void {
+        fn decodeStruct2(ptr: *MyStruct) void {
             _ = ptr;
         }
     },
@@ -62,12 +62,10 @@ pub export fn joe() void {
         .e = .{ .abc = 123 },
         .f = &z,
     };
-    Bindings.decodeStruct(@intCast(i32, @ptrToInt(&t)));
-    Bindings.decodeStruct2(@intCast(i32, @ptrToInt(&t)));
+    Bindings.decodeStruct(&t);
+    Bindings.decodeStruct2(&t);
 }
 
-pub export fn joe2(name: u16, num: f64) u16 {
-    _ = num;
-
-    return name;
+pub export fn joeManipulatesStructFromZig(st: *MyStruct) void {
+    st.a += 1;
 }

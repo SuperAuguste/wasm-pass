@@ -106,7 +106,10 @@ pub const BindingGenerator = struct {
             u8, i8, u16, i16, u32, i32, f32, f64 => "number",
             u64, i64 => "BigInt",
             bool => "boolean",
-            else => store.getTypePath(T),
+            else => switch (@typeInfo(T)) {
+                .Pointer => "number",
+                else => store.getTypePath(T),
+            },
         };
     }
 
@@ -188,7 +191,7 @@ pub const BindingGenerator = struct {
 
         if (has_args or has_return) {
             inline for (info.args) |arg, i| {
-                try writer.print(" * @param {{{s}}} arg{d}", .{ jsTypeOf(store, arg.arg_type.?), i });
+                try writer.print(" * @param {{{s}}} arg{d} {s}", .{ jsTypeOf(store, arg.arg_type.?), i, @typeName(arg.arg_type.?) });
                 try self.stream.insertNewline();
             }
 
