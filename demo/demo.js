@@ -9,7 +9,7 @@ const imports = {
             st.a = 20;
             st.b = 420;
             st.c = true;
-            st.d = bindings.MyEnum.from("mama");
+            st.d = bindings.MyEnum.mama;
 
             st.encode(ptr);
             console.log(st);
@@ -27,4 +27,5 @@ const wasmInstance = new WebAssembly.Instance(wasmModule, imports);
 
 const bindings = require("./bindings")(wasmInstance);
 
-wasmInstance.exports.joe();
+bindings.joe();
+// wasmInstance.exports.joe();

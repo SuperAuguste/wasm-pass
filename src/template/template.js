@@ -34,9 +34,13 @@ class Enum {
         if (arguments.length !== 0) throw new Error(`Use ${this.constructor.name}.from(number)!`);
     }
 
+    static getVariants() {
+        return Object.entries(this).slice(this.__constant_count + 2 /* account for __size and __constant_count */);
+    }
+
     /** @param {number} value */
     static from(value) {
-        for (const tag of Object.values(this.values)) {
+        for (const [_, tag] of this.getVariants()) {
             if (tag.value === value) return tag;
         }
 
@@ -46,7 +50,7 @@ class Enum {
     }
 
     toString() {
-        for (const [name, tag] of Object.entries(this.constructor.values)) {
+        for (const [name, tag] of this.constructor.getVariants()) {
             if (tag.value === this.value) return `${this.constructor.name}.${name}`;
         }
 
@@ -59,55 +63,6 @@ class Enum {
 }
 
 class Struct {}
-
-class Slice {
-    /** @type {Object} */
-    type;
-
-    /** @type {number} */
-    len;
-
-    /** @type {number} */
-    ptr;
-
-    constructor(type, len, ptr) {
-        this.type = type;
-        this.len = len;
-        this.ptr = ptr;
-    }
-
-    /**
-     * Decodes a `Slice`
-     * @param {Object} type Type of slice items
-     * @param {DataView} dataView DataView representing WASM memory
-     * @param {number} offset The offset at which the struct starts
-     * @returns {Slice}
-     */
-    static decode(type, dataView, offset = 0) {
-        const len = dataView.getUint32(offset);
-        const ptr = dataView.getUint32(offset + 4);
-
-        return new this(type, len, ptr);
-    }
-
-    /**
-     * @param {DataView} view
-     * @param {number} index
-     * @returns {any}
-     */
-    get(view, index) {
-        return this.type.decode(view, this.ptr + index * sizeOf(this.type));
-    }
-
-    /**
-     * @param {DataView} view
-     * @param {number} index
-     * @param {any} value
-     */
-    set(view, index, value) {
-        value.encode(view, this.ptr + index * sizeOf(this.type));
-    }
-}
 
 class Allocator {
     allocBytes;
@@ -141,8 +96,8 @@ module.exports = function bind(instance) {
     let view = new DataView(instance.exports.memory.buffer);
 
     function getDataView() {
-        // When dataView.buffer.byteLength is 0, the memory buffer was resized and needs to be refereshed.
-        return dataView.buffer.byteLength === 0 ? (view = new DataView(instance.exports.memory.buffer)) : view;
+        // When view.buffer.byteLength is 0, the memory buffer was resized and needs to be refreshed.
+        return view.buffer.byteLength === 0 ? (view = new DataView(instance.exports.memory.buffer)) : view;
     }
 
     /// BINDINGS
@@ -152,5 +107,4 @@ module.exports = function bind(instance) {
 module.exports.Allocator = Allocator;
 module.exports.Struct = Struct;
 module.exports.sizeOf = sizeOf;
-module.exports.Slice = Slice;
 module.exports.Enum = Enum;

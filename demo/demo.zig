@@ -52,7 +52,7 @@ pub fn main() anyerror!void {
     } else unreachable;
 }
 
-export fn joe() void {
+pub export fn joe() void {
     var z: i16 = 420;
     var t = MyStruct{
         .a = 69,

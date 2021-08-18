@@ -173,7 +173,7 @@ pub const BindingGenerator = struct {
         const info = @typeInfo(T).Fn;
 
         if (info.calling_convention != .C or info.return_type == null) {
-            try writer.writeAll("() => new Error('Function uses invalid call convention')");
+            try writer.writeAll("() => new Error(\"Function uses invalid call convention\")");
             return;
         }
 
@@ -278,14 +278,17 @@ pub const BindingGenerator = struct {
         }
     }
 
-
-    fn emitDeclarations(self: *BindingGenerator, comptime store: TypeStore, comptime T: type) !void {
+    /// Emits declarations, returns number of declarations emitted
+    fn emitDeclarations(self: *BindingGenerator, comptime store: TypeStore, comptime T: type) !usize {
+        comptime var count: usize = 0;
         inline for (std.meta.declarations(T)) |decl| {
             if (decl.is_pub) {
                 try self.emitDeclaration(store, decl.name, @field(T, decl.name));
                 try self.stream.insertNewline();
+                count += 1;
             }
         }
+        return count;
     }
 
     fn emitEnum(self: *BindingGenerator, comptime store: TypeStore, comptime T: type) !void {
@@ -312,21 +315,14 @@ pub const BindingGenerator = struct {
         try self.emitDeclaration(store, "__size", @sizeOf(T));
         try self.stream.insertNewline();
 
-        try self.emitDeclarations(store, T);
+        try self.emitDeclaration(store, "__constant_count", try self.emitDeclarations(store, T));
         try self.stream.insertNewline();
-
-        try writer.writeAll("static values = {");
         try self.stream.insertNewline();
-        self.stream.pushIndent();
 
         inline for (std.meta.fields(T)) |field| {
-            try writer.print("{s}: createEnumValue(" ++ name ++ ", {d}),", .{ field.name, field.value });
+            try writer.print("static {s} = createEnumValue(" ++ name ++ ", {d});", .{ field.name, field.value });
             try self.stream.insertNewline();
         }
-
-        self.stream.popIndent();
-        try writer.writeAll("}");
-        try self.stream.insertNewline();
 
         try self.stream.insertNewline();
 
@@ -415,7 +411,7 @@ pub const BindingGenerator = struct {
         try self.emitDeclaration(store, "__size", @sizeOf(T));
         try self.stream.insertNewline();
 
-        try self.emitDeclarations(store, T);
+        _ = try self.emitDeclarations(store, T);
         try self.stream.insertNewline();
 
         inline for (std.meta.fields(T)) |field| {
@@ -637,7 +633,7 @@ pub const BindingGenerator = struct {
         self.state = .{ .is_object = true };
         defer self.state = previous_state;
 
-        try self.emitDeclarations(store, T);
+        _ = try self.emitDeclarations(store, T);
 
         self.stream.popIndent();
         try writer.writeAll("}");
