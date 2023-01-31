@@ -144,7 +144,7 @@ pub fn generateStruct(allocator: std.mem.Allocator, @"struct": Node.Struct, writ
                 if (std.mem.eql(u8, id.value, "string")) {
                     // try writer.print("const B = struct {{extern fn wasm_pass__{s}_get_{s}_length(handle: Handle) i32;\n", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
                     try writer.print("const B = struct {{extern fn {s}() i32;\n", .{StructExternFuncNameFormatter.getLength(@"struct", field)});
-                    try writer.print("extern fn {s}(handle: Handle, ptr: i32) void;\n}};\n", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
+                    try writer.print("extern fn {s}(handle: Handle, ptr: i32) void;\n}};\n", .{StructExternFuncNameFormatter.getLength(@"struct", field)});
                     try writer.print("const data = try allocator.alloc(u8, B.wasm_pass__{s}_get_{s}_length(self.handle));\n", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
                     try writer.print("B.wasm_pass__{s}_get_{s}_value(self.handle, @intCast(i32, @ptrToInt(data)));", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
                     try writer.writeAll("return data;");
