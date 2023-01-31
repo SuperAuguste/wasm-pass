@@ -23,6 +23,44 @@ pub const SnakeToPascal = struct {
     }
 };
 
+pub const StructExternFuncNameFormatter = struct {
+    pub const Kind = enum {
+        get,
+        get_length,
+        get_value,
+        set,
+    };
+
+    @"struct": Node.Struct,
+    field: Node.Struct.Field,
+    kind: Kind,
+
+    pub fn get(@"struct": Node.Struct, field: Node.Struct.Field) StructExternFuncNameFormatter {
+        return .{ .@"struct" = @"struct", .field = field, .kind = .get };
+    }
+
+    pub fn getLength(@"struct": Node.Struct, field: Node.Struct.Field) StructExternFuncNameFormatter {
+        return .{ .@"struct" = @"struct", .field = field, .kind = .get_length };
+    }
+
+    pub fn getValue(@"struct": Node.Struct, field: Node.Struct.Field) StructExternFuncNameFormatter {
+        return .{ .@"struct" = @"struct", .field = field, .kind = .get_value };
+    }
+
+    pub fn set(@"struct": Node.Struct, field: Node.Struct.Field) StructExternFuncNameFormatter {
+        return .{ .@"struct" = @"struct", .field = field, .kind = .set };
+    }
+
+    pub fn format(value: StructExternFuncNameFormatter, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        switch (value.kind) {
+            .get => try writer.print("wasm_pass__{s}_get_{s}", .{ std.zig.fmtId(value.@"struct".name), std.zig.fmtId(value.field.name) }),
+            .get_length => try writer.print("wasm_pass__{s}_get_{s}_length", .{ std.zig.fmtId(value.@"struct".name), std.zig.fmtId(value.field.name) }),
+            .get_value => try writer.print("wasm_pass__{s}_get_{s}_value", .{ std.zig.fmtId(value.@"struct".name), std.zig.fmtId(value.field.name) }),
+            .set => try writer.print("wasm_pass__{s}_set_{s}", .{ std.zig.fmtId(value.@"struct".name), std.zig.fmtId(value.field.name) }),
+        }
+    }
+};
+
 /// Please feed in an arena
 pub fn generate(allocator: std.mem.Allocator, node: Node, writer: anytype) anyerror!void {
     switch (node) {
@@ -64,6 +102,19 @@ pub fn generate(allocator: std.mem.Allocator, node: Node, writer: anytype) anyer
     }
 }
 
+pub fn requiresAllocator(@"type": Node) bool {
+    switch (@"type") {
+        .identifier => |id| {
+            if (std.mem.eql(u8, id.value, "string")) {
+                return true;
+            }
+        },
+        else => {},
+    }
+
+    return false;
+}
+
 pub fn generateStruct(allocator: std.mem.Allocator, @"struct": Node.Struct, writer: anytype) !void {
     try writer.print("pub const {s} = struct {{handle: Handle,\n\n", .{std.zig.fmtId(@"struct".name)});
 
@@ -78,13 +129,34 @@ pub fn generateStruct(allocator: std.mem.Allocator, @"struct": Node.Struct, writ
             try writer.writeAll("};");
         }
 
-        try writer.print("pub fn get_{s}(self: {s}) ", .{ field.name, std.zig.fmtId(@"struct".name) });
+        try writer.print("pub fn get_{s}(self: {s} ", .{ field.name, std.zig.fmtId(@"struct".name) });
+        if (requiresAllocator(field.type)) try writer.writeAll(", allocator: std.mem.Allocator");
+        try writer.writeAll(")");
         if (field.get_errors.len != 0) {
             try writer.print("Get{s}Error", .{SnakeToPascal{ .str = field.name }});
             try writer.writeAll("!");
         }
         try generate(allocator, field.type, writer);
-        try writer.writeAll("{}\n\n");
+        try writer.writeAll("{");
+
+        switch (field.type) {
+            .identifier => |id| {
+                if (std.mem.eql(u8, id.value, "string")) {
+                    // try writer.print("const B = struct {{extern fn wasm_pass__{s}_get_{s}_length(handle: Handle) i32;\n", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
+                    try writer.print("const B = struct {{extern fn {s}() i32;\n", .{StructExternFuncNameFormatter.getLength(@"struct", field)});
+                    try writer.print("extern fn {s}(handle: Handle, ptr: i32) void;\n}};\n", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
+                    try writer.print("const data = try allocator.alloc(u8, B.wasm_pass__{s}_get_{s}_length(self.handle));\n", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
+                    try writer.print("B.wasm_pass__{s}_get_{s}_value(self.handle, @intCast(i32, @ptrToInt(data)));", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
+                    try writer.writeAll("return data;");
+                }
+            },
+            .array => {
+                // try writer.print("extern fn wasm_pass__{s}_get_{s}(handle: Handle, ptr: i32) void;\n", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
+            },
+            else => @panic("no"),
+        }
+
+        try writer.writeAll("}");
 
         // SET
 
@@ -96,19 +168,40 @@ pub fn generateStruct(allocator: std.mem.Allocator, @"struct": Node.Struct, writ
             try writer.writeAll("};");
         }
 
-        try writer.print("pub fn set_{s}(self: {s}, value:  ", .{ field.name, std.zig.fmtId(@"struct".name) });
-        try generate(allocator, field.type, writer);
-        try writer.writeAll(")  ");
+        if (!field.is_read_only) {
+            try writer.print("pub fn set_{s}(self: {s}, value:  ", .{ field.name, std.zig.fmtId(@"struct".name) });
+            try generate(allocator, field.type, writer);
+            try writer.writeAll(")  ");
 
-        if (field.set_errors.len != 0) {
-            try writer.print("Set{s}Error", .{SnakeToPascal{ .str = field.name }});
-            try writer.writeAll("!void");
-        } else {
-            try writer.writeAll("void");
+            if (field.set_errors.len != 0) {
+                try writer.print("Set{s}Error", .{SnakeToPascal{ .str = field.name }});
+                try writer.writeAll("!void");
+            } else {
+                try writer.writeAll("void");
+            }
+
+            try writer.writeAll("{}\n\n");
         }
-
-        try writer.writeAll("{}\n\n");
     }
+
+    // for (@"struct".fields) |field| {
+    //     switch (field.type) {
+    //         .identifier => |id| {
+    //             if (std.mem.eql(u8, id.value, "string")) {
+    //                 try writer.print("extern fn wasm_pass__{s}_get_{s}_length(handle: Handle) i32;\n", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
+    //                 try writer.print("extern fn wasm_pass__{s}_get_{s}_value(handle: Handle, ptr: i32) void;\n", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
+
+    //                 if (!field.is_read_only) try writer.print("extern fn wasm_pass__{s}_set_{s}(handle: Handle, ptr: i32, len: i32) void;\n", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
+    //             }
+    //         },
+    //         .array => {
+    //             try writer.print("extern fn wasm_pass__{s}_get_{s}(handle: Handle, ptr: i32) void;\n", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
+
+    //             if (!field.is_read_only) try writer.print("extern fn wasm_pass__{s}_set_{s}(handle: Handle, ptr: i32) void;\n", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
+    //         },
+    //         else => @panic("no"),
+    //     }
+    // }
 
     try writer.writeAll("};\n");
 }

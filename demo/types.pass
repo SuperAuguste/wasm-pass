@@ -17,8 +17,8 @@ struct Identity {
     @read_only();
     id: [32]u8,
 
-    @get_errors(OutOfRange);
-    @set_errors(OutOfRange, NotOwner, NameTooLong, OutOfMemory);
+    @get_errors(OutOfRange, OutOfMemory);
+    @set_errors(OutOfRange, NotOwner, NameTooLong);
     name: string,
 };
 
