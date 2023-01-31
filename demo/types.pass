@@ -1,0 +1,26 @@
+// Data is stored on the host end using handles and transferred
+// whenever necessary, minimizing syncing / security issues
+
+// A struct stored w/ a handle
+// @creatable() allows the Zig code to create a new handle
+@creatable();
+
+// @snapshot() allows the Zig code to take a snapshot of the
+// entire struct at that specific instant with no syncing
+// guarantees, ensuring faster access (useful for known-safe hot code paths)
+@snapshot();
+
+// Describes an identity
+struct Identity {
+    // We don't want any Zig code modifying this as it's host-assigned
+    // Additionally, this property is exempt from the `@creatable` call
+    @read_only();
+    id: [32]u8,
+
+    @get_errors(OutOfRange);
+    @set_errors(OutOfRange, NotOwner, NameTooLong, OutOfMemory);
+    name: string,
+};
+
+// Now someone could run `Identity.create(.{.name = "Zigbot 9001"})`
+
