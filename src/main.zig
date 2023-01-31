@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const Parser = @import("meta/Parser.zig");
+const GenZig = @import("gen/GenZig.zig");
 
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
@@ -11,5 +12,5 @@ pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
 
-    std.debug.print("{any}", .{try Parser.parse(arena.allocator(), file_data)});
+    try GenZig.generate(arena.allocator(), try Parser.parse(arena.allocator(), file_data), std.io.getStdOut().writer());
 }

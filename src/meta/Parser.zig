@@ -75,7 +75,7 @@ pub const Node = union(enum) {
 
         pub const Kind = enum {
             creatable,
-            snapshot,
+            snapshotable,
             read_only,
             get_errors,
             set_errors,
@@ -91,7 +91,7 @@ pub const Node = union(enum) {
                 if (parser.tokens.next().tag != .l_paren) return error.Invalid;
 
                 switch (kind) {
-                    .creatable, .snapshot, .read_only => {
+                    .creatable, .snapshotable, .read_only => {
                         // Args should be empty
                         try annotations.append(parser.allocator, .{
                             .kind = kind,
@@ -123,13 +123,19 @@ pub const Node = union(enum) {
 
     pub const Struct = struct {
         name: []const u8,
-        annotations: []const Annotation,
+        // annotations: []const Annotation,
         fields: []const Field,
+
+        is_creatable: bool,
+        is_snapshotable: bool,
 
         pub const Field = struct {
             name: []const u8,
-            annotations: []const Annotation,
             type: Node,
+
+            is_read_only: bool,
+            get_errors: [][]const u8,
+            set_errors: [][]const u8,
         };
 
         pub fn parse(parser: *Parser, annotations: []const Annotation) !Node {
@@ -152,10 +158,34 @@ pub const Node = union(enum) {
 
                 if (parser.tokens.next().tag != .colon) return error.Invalid;
 
+                var is_read_only = false;
+                var get_errors = std.ArrayListUnmanaged([]const u8){};
+                var set_errors = std.ArrayListUnmanaged([]const u8){};
+
+                for (field_annotations) |anno| {
+                    switch (anno.kind) {
+                        .read_only => is_read_only = true,
+                        .get_errors => {
+                            for (anno.arguments) |arg| {
+                                try get_errors.append(parser.allocator, arg.identifier.value);
+                            }
+                        },
+                        .set_errors => {
+                            for (anno.arguments) |arg| {
+                                try set_errors.append(parser.allocator, arg.identifier.value);
+                            }
+                        },
+                        else => return error.InvalidAnnotation,
+                    }
+                }
+
                 try fields.append(parser.allocator, .{
                     .name = field_name,
-                    .annotations = field_annotations,
                     .type = try Node.parseType(parser),
+
+                    .is_read_only = is_read_only,
+                    .get_errors = try get_errors.toOwnedSlice(parser.allocator),
+                    .set_errors = try set_errors.toOwnedSlice(parser.allocator),
                 });
 
                 if (parser.tokens.next().tag != .comma) return error.Invalid;
@@ -164,11 +194,26 @@ pub const Node = union(enum) {
             _ = parser.tokens.next();
             if (parser.tokens.next().tag != .semicolon) return error.Invalid;
 
+            // Annotations
+
+            var is_creatable = false;
+            var is_snapshotable = false;
+
+            for (annotations) |anno| {
+                switch (anno.kind) {
+                    .creatable => is_creatable = true,
+                    .snapshotable => is_snapshotable = true,
+                    else => return error.InvalidAnnotation,
+                }
+            }
+
             return .{
                 .@"struct" = .{
                     .name = name,
-                    .annotations = annotations,
                     .fields = try fields.toOwnedSlice(parser.allocator),
+
+                    .is_creatable = is_creatable,
+                    .is_snapshotable = is_snapshotable,
                 },
             };
         }

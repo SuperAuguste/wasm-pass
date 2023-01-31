@@ -8,7 +8,7 @@
 // @snapshot() allows the Zig code to take a snapshot of the
 // entire struct at that specific instant with no syncing
 // guarantees, ensuring faster access (useful for known-safe hot code paths)
-@snapshot();
+@snapshotable();
 
 // Describes an identity
 struct Identity {
