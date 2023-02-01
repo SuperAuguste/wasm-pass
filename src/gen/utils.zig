@@ -20,6 +20,10 @@ pub const SnakeToPascal = struct {
 };
 
 pub const NameGenerator = struct {
+    pub fn function(comptime fn_name: []const u8) []const u8 {
+        return "wasm_pass__fn_" ++ fn_name;
+    }
+
     pub const StructNameKind = enum { create };
     pub fn @"struct"(comptime kind: StructNameKind, comptime struct_name: []const u8) []const u8 {
         return switch (kind) {

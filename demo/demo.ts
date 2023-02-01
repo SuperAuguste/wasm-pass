@@ -14,6 +14,10 @@ class Manager implements M {
     createIdentity(handle: number): void {
         this.handles[handle] = {id: new Uint8Array(32), name: "travis is watching my stream rn"};
     }
+
+    console_log(arg0: string): void {
+        console.log(arg0);
+    }
 }
 
 (async () => {
@@ -21,11 +25,7 @@ class Manager implements M {
     let manager = new Manager();
 
     let memory = new WebAssembly.Memory({ initial: 17, maximum: 100 });
-    let instance = new WebAssembly.Instance(mod, create(manager, memory, {
-        logThis (ptr: number, len: number) {
-            console.log(new TextDecoder().decode(memory.buffer.slice(ptr, ptr + len)));
-        }
-    }));
+    let instance = new WebAssembly.Instance(mod, create(manager, memory));
 
     if (instance.exports.init)
             (instance.exports.init as Function)();

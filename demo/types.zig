@@ -1,5 +1,7 @@
 const pass = @import("wasm-pass-meta");
 
+pub const console_log = fn (data: []const u8) void;
+
 pub const Identity = pass.Struct(
     .{
         .creatable = true,

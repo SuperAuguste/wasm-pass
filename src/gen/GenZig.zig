@@ -36,6 +36,7 @@ pub fn generate(allocator: std.mem.Allocator, comptime T: type, writer: anytype)
 fn generateDecl(allocator: std.mem.Allocator, comptime name: []const u8, comptime T: type, writer: anytype) anyerror!void {
     return switch (@typeInfo(T)) {
         .Struct => try generateStruct(allocator, name, T, writer),
+        .Fn => try generateFunction(allocator, name, T, writer),
         else => @compileError("Type not supported: " ++ @typeName(T)),
     };
 }
@@ -197,4 +198,73 @@ pub fn generateStruct(
     }
 
     try writer.writeAll("};\n");
+}
+
+pub fn generateFunction(
+    allocator: std.mem.Allocator,
+    comptime name: []const u8,
+    comptime T: type,
+    writer: anytype,
+) !void {
+    const fn_info = @typeInfo(T).Fn;
+
+    try writer.print(
+        \\pub fn {[name]s}(
+    , .{
+        .name = name,
+    });
+
+    // _ = allocator;
+    inline for (fn_info.params) |param, index| {
+        try writer.print("@\"{d}\": ", .{index});
+        try generateFieldType(allocator, param.type.?, writer);
+        try writer.writeByte(',');
+    }
+
+    try writer.writeByte(')');
+    try generateFieldType(allocator, fn_info.return_type.?, writer);
+
+    try writer.print(
+        \\{{
+        \\    const B = struct {{
+        \\        extern fn {[name]s}(
+    , .{
+        .name = utils.NameGenerator.function(name),
+    });
+
+    inline for (fn_info.params) |param| {
+        if (param.type.? == []const u8) {
+            try writer.writeAll("i32, i32,");
+            continue;
+        }
+
+        switch (param.type.?) {
+            else => @compileError("Type not supported: " ++ @typeName(param.type.?)),
+        }
+    }
+
+    // TODO: Support others
+    try writer.writeAll(") void;");
+
+    try writer.print(
+        \\
+        \\}};
+        \\
+        \\return B.{[name]s}(
+    , .{
+        .name = utils.NameGenerator.function(name),
+    });
+
+    inline for (fn_info.params) |param, index| {
+        if (param.type.? == []const u8) {
+            try writer.print("@intCast(i32, @ptrToInt(@\"{[index]d}\".ptr)), @intCast(i32, @\"{[index]d}\".len),", .{ .index = index });
+            continue;
+        }
+
+        switch (param.type.?) {
+            else => @compileError("Type not supported: " ++ @typeName(param.type.?)),
+        }
+    }
+
+    try writer.writeAll(");}");
 }
