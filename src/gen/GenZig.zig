@@ -61,6 +61,21 @@ pub fn generateStruct(
 
     try writer.print("pub const {s} = struct {{handle: Handle,\n\n", .{std.zig.fmtId(name)});
 
+    if (info.options.creatable) {
+        // TODO: Make createable have error set
+        try writer.print(
+            \\pub fn create() {[name]s} {{
+            \\    const B = struct {{
+            \\        extern fn {[create]s}() i32;
+            \\    }}; 
+            \\    return .{{ .handle = @intToEnum(Handle, B.{[create]s}()) }};
+            \\}}
+        , .{
+            .name = name,
+            .create = utils.NameGenerator.@"struct"(.create, name),
+        });
+    }
+
     inline for (comptime std.meta.fields(info.type)) |field| {
         const field_info = meta.getField(field.type);
 
@@ -93,8 +108,8 @@ pub fn generateStruct(
                                 \\    extern fn {[get_value]s}(handle: Handle, ptr: i32) void;
                                 \\}};
                                 \\
-                                \\const data = try allocator.alloc(u8, B.{[get_length]s}(self.handle));
-                                \\B.{[get_value]s}(self.handle, @intCast(i32, @ptrToInt(data)));
+                                \\const data = try allocator.alloc(u8, @intCast(usize, B.{[get_length]s}(self.handle)));
+                                \\B.{[get_value]s}(self.handle, @intCast(i32, @ptrToInt(data.ptr)));
                                 \\return data;
                             , .{
                                 .get_length = std.zig.fmtId(utils.NameGenerator.structField(.get_length, name, field.name)),

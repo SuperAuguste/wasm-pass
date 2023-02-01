@@ -1,0 +1,6 @@
+{
+  "main": "demo/demo.ts",
+  "devDependencies": {
+    "@types/node": "^18.11.18"
+  }
+}

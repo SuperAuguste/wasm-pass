@@ -49,14 +49,14 @@ pub fn generate(allocator: std.mem.Allocator, comptime T: type, writer: anytype)
     try writer.writeAll(manager_buf.items);
     try writer.writeAll("\n};\n\n");
 
-    try aiw.writer().writeAll("function create(manager: Manager, memory: WebAssembly.Memory) {");
+    try aiw.writer().writeAll("export function create(manager: Manager, memory: WebAssembly.Memory, extras: any = {}) {");
     aiw.pushIndent();
-    try aiw.writer().writeAll("\nreturn {env: {\n");
+    try aiw.writer().writeAll("\nreturn {env: {memory,\n");
 
     try writer.writeAll(func_buf.items);
 
     aiw.popIndent();
-    try aiw.writer().writeAll("}};\n");
+    try aiw.writer().writeAll("...extras,}};\n");
     try aiw.writer().writeAll("}");
 }
 

@@ -2,3 +2,4 @@
 /zig-cache
 bindings.js
 /out
+/node_modules
