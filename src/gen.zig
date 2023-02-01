@@ -27,6 +27,8 @@ pub fn main() !void {
         const kind = std.meta.stringToEnum(Kind, args[index]) orelse @panic("Invalid arguments");
         const path = args[index + 1];
 
+        if (std.fs.path.dirname(path)) |d| try std.fs.cwd().makePath(d);
+
         var file = try std.fs.cwd().createFile(path, .{});
         defer file.close();
 

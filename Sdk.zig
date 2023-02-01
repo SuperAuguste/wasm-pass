@@ -30,14 +30,15 @@ pub const GenStep = struct {
     builder: *std.build.Builder,
     source: std.build.FileSource,
 
-    output_file: std.build.GeneratedFile,
+    ts_output_file: std.build.GeneratedFile,
+    zig_output_file: std.build.GeneratedFile,
 
     pub fn create(
         builder: *std.build.Builder,
         file: []const u8,
         target: std.zig.CrossTarget,
         build_mode: std.builtin.Mode,
-    ) *GenStep {
+    ) !*GenStep {
         return createSource(builder, .{ .path = file }, target, build_mode);
     }
 
@@ -46,14 +47,15 @@ pub const GenStep = struct {
         source: std.build.FileSource,
         target: std.zig.CrossTarget,
         build_mode: std.builtin.Mode,
-    ) *GenStep {
+    ) !*GenStep {
         const self = builder.allocator.create(GenStep) catch unreachable;
         self.* = GenStep{
             .step = std.build.Step.init(.custom, "build-template", builder.allocator, make),
             .builder = builder,
             .source = source,
 
-            .output_file = std.build.GeneratedFile{ .step = &self.step },
+            .ts_output_file = std.build.GeneratedFile{ .step = &self.step },
+            .zig_output_file = std.build.GeneratedFile{ .step = &self.step },
         };
         source.addStepDependencies(&self.step);
 
@@ -74,11 +76,20 @@ pub const GenStep = struct {
 
         var run_cmd = exe.run();
         run_cmd.step.dependOn(&exe.step);
-        run_cmd.addArgs(&.{ "zig", "bruh.zig" });
+        run_cmd.addArgs(&.{
+            "ts",
+            try std.fs.path.join(builder.allocator, &.{ builder.cache_root, "o", "wasm-pass", "bindings.ts" }),
+            "zig",
+            try std.fs.path.join(builder.allocator, &.{ builder.cache_root, "o", "wasm-pass", "bindings.zig" }),
+        });
 
         self.step.dependOn(&run_cmd.step);
 
         return self;
+    }
+
+    pub fn install(gen_step: *GenStep) void {
+        gen_step.builder.getInstallStep().dependOn(&gen_step.step);
     }
 
     // pub fn transform(builder: *std.build.Builder, file: []const u8) std.build.FileSource {
@@ -97,26 +108,9 @@ pub const GenStep = struct {
     }
 
     fn make(step: *std.build.Step) !void {
-        _ = step;
-        std.debug.print("\n\nbruh!!\n\n", .{});
-        // const self = @fieldParentPtr(GenStep, "step", step);
+        const self = @fieldParentPtr(GenStep, "step", step);
 
-        // const source_file_name = self.source.getPath(self.builder);
-
-        // const basename = std.fs.path.basename(source_file_name);
-
-        // const output_name = blk: {
-        //     if (std.mem.indexOf(u8, basename, ".")) |index| {
-        //         break :blk try std.mem.join(self.builder.allocator, ".", &[_][]const u8{
-        //             basename[0..index],
-        //             "zig",
-        //         });
-        //     } else {
-        //         break :blk try std.mem.join(self.builder.allocator, ".", &[_][]const u8{
-        //             basename,
-        //             "zig",
-        //         });
-        //     }
-        // };
+        self.ts_output_file.path = try std.fs.path.join(self.builder.allocator, &.{ self.builder.cache_root, "o", "wasm-pass", "bindings.ts" });
+        self.zig_output_file.path = try std.fs.path.join(self.builder.allocator, &.{ self.builder.cache_root, "o", "wasm-pass", "bindings.zig" });
     }
 };

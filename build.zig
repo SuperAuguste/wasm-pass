@@ -7,18 +7,24 @@ pub fn build(b: *std.build.Builder) !void {
 
     // const exe = Sdk.add(b, "demo/types.zig", target, mode);
 
-    var gen_step = Sdk.GenStep.create(b, "demo/types.zig", target, mode);
-    // _ = gen_step;
-    b.getInstallStep().dependOn(&gen_step.step);
+    var gen_step = try Sdk.GenStep.create(b, "demo/types.zig", target, mode);
+    gen_step.install();
 
-    // const run_cmd = exe.run();
-    // run_cmd.step.dependOn(b.getInstallStep());
-    // if (b.args) |args| {
-    //     run_cmd.addArgs(args);
-    // }
+    const exe = b.addExecutable("demo", "demo/demo.zig");
+    exe.addPackage(.{
+        .name = "wasm-pass",
+        .source = .{ .generated = &gen_step.zig_output_file },
+    });
+    exe.setTarget(target);
+    exe.setBuildMode(mode);
+    exe.step.dependOn(&gen_step.step);
 
-    // const real_exe = b.addExecutable("demo", "");
+    const run_cmd = exe.run();
+    run_cmd.step.dependOn(b.getInstallStep());
+    if (b.args) |args| {
+        run_cmd.addArgs(args);
+    }
 
-    // const run_step = b.step("run", "Run the app");
-    // run_step.dependOn(&run_cmd.step);
+    const run_step = b.step("run", "Run the app");
+    run_step.dependOn(&run_cmd.step);
 }
