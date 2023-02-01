@@ -6,7 +6,7 @@ pub const StructOptions = struct {
 };
 
 const StructMark = opaque {};
-pub fn Struct(comptime T: type, comptime options_: StructOptions) type {
+pub fn Struct(comptime options_: StructOptions, comptime T: type) type {
     if (@typeInfo(T) != .Struct) @compileError("pass.Struct only supports struct types");
     return struct {
         const mark = StructMark;
@@ -39,7 +39,7 @@ pub const FieldOptions = struct {
 };
 
 const FieldMark = opaque {};
-pub fn Field(comptime T: type, comptime options_: FieldOptions) type {
+pub fn Field(comptime options_: FieldOptions, comptime T: type) type {
     return struct {
         const mark = FieldMark;
 

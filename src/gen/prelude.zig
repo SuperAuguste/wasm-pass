@@ -1,3 +1,3 @@
 const std = @import("std");
 
-pub const Handle = enum(i32) { _ };
+pub const Handle = enum(u32) { _ };

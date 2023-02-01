@@ -2,25 +2,7 @@ const GenZig = @This();
 
 const std = @import("std");
 const meta = @import("../meta.zig");
-
-pub const SnakeToPascal = struct {
-    str: []const u8,
-
-    pub fn format(value: SnakeToPascal, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
-        try writer.writeByte(std.ascii.toUpper(value.str[0]));
-
-        var index: usize = 1;
-        while (index < value.str.len) : (index += 1) {
-            const char = value.str[index];
-            if (char == '_') {
-                index += 1;
-                try writer.writeByte(std.ascii.toUpper(value.str[index]));
-            } else {
-                try writer.writeByte(std.ascii.toLower(value.str[index]));
-            }
-        }
-    }
-};
+const utils = @import("utils.zig");
 
 pub const FieldNameFormatter = struct {
     pub const Kind = enum { get, get_length, get_value, set };
@@ -97,7 +79,7 @@ pub fn generateStruct(
         switch (field_info.options.get) {
             .yes => |get_opts| {
                 if (get_opts.errors) |errs| {
-                    try writer.print("pub const Get{s}Error = error{{", .{SnakeToPascal{ .str = field.name }});
+                    try writer.print("pub const Get{s}Error = error{{", .{utils.SnakeToPascal{ .str = field.name }});
                     inline for (comptime std.meta.fields(errs)) |err| {
                         try writer.print("{s},", .{std.zig.fmtId(err.name)});
                     }
@@ -108,7 +90,7 @@ pub fn generateStruct(
                 if (requiresAllocator(field_info.type)) try writer.writeAll(", allocator: std.mem.Allocator");
                 try writer.writeAll(")");
                 if (get_opts.errors) |_| {
-                    try writer.print("Get{s}Error", .{SnakeToPascal{ .str = field.name }});
+                    try writer.print("Get{s}Error", .{utils.SnakeToPascal{ .str = field.name }});
                     try writer.writeAll("!");
                 }
                 try generateFieldType(allocator, field_info.type, writer);
@@ -119,12 +101,12 @@ pub fn generateStruct(
                         if (field_info.type == []const u8) {
                             try writer.print(
                                 \\const B = struct {{
-                                \\    extern fn {[get_length]s}(handle: Handle) u32;
-                                \\    extern fn {[get_value]s}(handle: Handle, ptr: u32) void;
+                                \\    extern fn {[get_length]s}(handle: Handle) i32;
+                                \\    extern fn {[get_value]s}(handle: Handle, ptr: i32) void;
                                 \\}};
                                 \\
                                 \\const data = try allocator.alloc(u8, B.{[get_length]s}(self.handle));
-                                \\B.{[get_value]s}(self.handle, @intCast(u32, @ptrToInt(data)));
+                                \\B.{[get_value]s}(self.handle, @intCast(i32, @ptrToInt(data)));
                                 \\return data;
                             , .{
                                 .get_length = FieldNameFormatter.structField(.get_length, name, field.name),
@@ -135,11 +117,11 @@ pub fn generateStruct(
                     .Array => |_| {
                         try writer.print(
                             \\const B = struct {{
-                            \\    extern fn {[get]s}(handle: Handle, ptr: u32) void;
+                            \\    extern fn {[get]s}(handle: Handle, ptr: i32) void;
                             \\}};
                             \\
                             \\const data: {[arr]s} = undefined;
-                            \\B.{[get]s}(self.handle, @intCast(u32, @ptrToInt(data)));
+                            \\B.{[get]s}(self.handle, @intCast(i32, @ptrToInt(data)));
                             \\return data;
                         , .{
                             .arr = @typeName(field_info.type),
@@ -159,7 +141,7 @@ pub fn generateStruct(
         switch (field_info.options.set) {
             .yes => |set_opts| {
                 if (set_opts.errors) |errs| {
-                    try writer.print("pub const Set{s}Error = error{{", .{SnakeToPascal{ .str = field.name }});
+                    try writer.print("pub const Set{s}Error = error{{", .{utils.SnakeToPascal{ .str = field.name }});
                     inline for (comptime std.meta.fields(errs)) |err| {
                         try writer.print("{s},", .{std.zig.fmtId(err.name)});
                     }
@@ -170,7 +152,7 @@ pub fn generateStruct(
                 try generateFieldType(allocator, field_info.type, writer);
                 try writer.writeAll(")");
                 if (set_opts.errors) |_| {
-                    try writer.print("Set{s}Error", .{SnakeToPascal{ .str = field.name }});
+                    try writer.print("Set{s}Error", .{utils.SnakeToPascal{ .str = field.name }});
                     try writer.writeAll("!void");
                 }
                 try writer.writeAll("{");
@@ -180,10 +162,10 @@ pub fn generateStruct(
                         if (field_info.type == []const u8) {
                             try writer.print(
                                 \\const B = struct {{
-                                \\    extern fn {[set]s}(handle: Handle, ptr: u32, len: u32) void;
+                                \\    extern fn {[set]s}(handle: Handle, ptr: i32, len: i32) void;
                                 \\}};
                                 \\
-                                \\B.{[set]s}(self.handle, @intCast(u32, @ptrToInt(value)), @intCast(u32, value.len));
+                                \\B.{[set]s}(self.handle, @intCast(i32, @ptrToInt(value)), @intCast(i32, value.len));
                                 \\return value;
                             , .{
                                 .set = FieldNameFormatter.structField(.set, name, field.name),
@@ -193,10 +175,10 @@ pub fn generateStruct(
                     .Array => |_| {
                         try writer.print(
                             \\const B = struct {{
-                            \\    extern fn {[set]s}(handle: Handle, ptr: u32) void;
+                            \\    extern fn {[set]s}(handle: Handle, ptr: i32) void;
                             \\}};
                             \\
-                            \\B.{[set]s}(self.handle, @intCast(u32, @ptrToInt(&value)));
+                            \\B.{[set]s}(self.handle, @intCast(i32, @ptrToInt(&value)));
                         , .{
                             .arr = @typeName(field_info.type),
                             .set = FieldNameFormatter.structField(.set, name, field.name),
