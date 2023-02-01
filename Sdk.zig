@@ -78,9 +78,9 @@ pub const GenStep = struct {
         run_cmd.step.dependOn(&exe.step);
         run_cmd.addArgs(&.{
             "ts",
-            try std.fs.path.join(builder.allocator, &.{ builder.cache_root, "o", "wasm-pass", "bindings.ts" }),
+            try std.fs.path.join(builder.allocator, &.{ builder.cache_root, "wasm-pass", "bindings.ts" }),
             "zig",
-            try std.fs.path.join(builder.allocator, &.{ builder.cache_root, "o", "wasm-pass", "bindings.zig" }),
+            try std.fs.path.join(builder.allocator, &.{ builder.cache_root, "wasm-pass", "bindings.zig" }),
         });
 
         self.step.dependOn(&run_cmd.step);
@@ -110,7 +110,7 @@ pub const GenStep = struct {
     fn make(step: *std.build.Step) !void {
         const self = @fieldParentPtr(GenStep, "step", step);
 
-        self.ts_output_file.path = try std.fs.path.join(self.builder.allocator, &.{ self.builder.cache_root, "o", "wasm-pass", "bindings.ts" });
-        self.zig_output_file.path = try std.fs.path.join(self.builder.allocator, &.{ self.builder.cache_root, "o", "wasm-pass", "bindings.zig" });
+        self.ts_output_file.path = try std.fs.path.join(self.builder.allocator, &.{ self.builder.cache_root, "wasm-pass", "bindings.ts" });
+        self.zig_output_file.path = try std.fs.path.join(self.builder.allocator, &.{ self.builder.cache_root, "wasm-pass", "bindings.zig" });
     }
 };

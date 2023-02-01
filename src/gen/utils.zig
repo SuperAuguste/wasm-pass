@@ -18,3 +18,22 @@ pub const SnakeToPascal = struct {
         }
     }
 };
+
+pub const NameGenerator = struct {
+    pub const StructNameKind = enum { create };
+    pub fn @"struct"(comptime kind: StructNameKind, comptime struct_name: []const u8) []const u8 {
+        return switch (kind) {
+            .create => "wasm_pass__" ++ struct_name ++ "_create",
+        };
+    }
+
+    pub const StructFieldNameKind = enum { get, get_length, get_value, set };
+    pub fn structField(comptime kind: StructFieldNameKind, comptime struct_name: []const u8, comptime field_name: []const u8) []const u8 {
+        return switch (kind) {
+            .get => "wasm_pass__" ++ struct_name ++ "_get_" ++ field_name,
+            .get_length => "wasm_pass__" ++ struct_name ++ "_get_" ++ field_name ++ "_length",
+            .get_value => "wasm_pass__" ++ struct_name ++ "_get_" ++ field_name ++ "_value",
+            .set => "wasm_pass__" ++ struct_name ++ "_set_" ++ field_name,
+        };
+    }
+};

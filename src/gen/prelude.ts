@@ -1,5 +1,6 @@
 type Handle = number;
 
 interface HandleManager {
-    get<T>(handle: Handle): T | null;
-}
+    getHandle<T>(handle: Handle): T | null;
+    createHandle(): Handle;
+};

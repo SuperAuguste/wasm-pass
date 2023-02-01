@@ -4,18 +4,6 @@ const std = @import("std");
 const meta = @import("../meta.zig");
 const utils = @import("utils.zig");
 
-pub const FieldNameFormatter = struct {
-    pub const Kind = enum { get, get_length, get_value, set };
-    pub fn structField(comptime kind: Kind, comptime struct_name: []const u8, comptime field_name: []const u8) []const u8 {
-        return std.fmt.comptimePrint("{}", .{comptime std.zig.fmtId(switch (kind) {
-            .get => "wasm_pass__" ++ struct_name ++ "_get_" ++ field_name,
-            .get_length => "wasm_pass__" ++ struct_name ++ "_get_" ++ field_name ++ "_length",
-            .get_value => "wasm_pass__" ++ struct_name ++ "_get_" ++ field_name ++ "_value",
-            .set => "wasm_pass__" ++ struct_name ++ "_set_" ++ field_name,
-        })});
-    }
-};
-
 /// Please feed in an arena
 pub fn generate(allocator: std.mem.Allocator, comptime T: type, writer: anytype) anyerror!void {
     var buf = std.ArrayListUnmanaged(u8){};
@@ -109,8 +97,8 @@ pub fn generateStruct(
                                 \\B.{[get_value]s}(self.handle, @intCast(i32, @ptrToInt(data)));
                                 \\return data;
                             , .{
-                                .get_length = FieldNameFormatter.structField(.get_length, name, field.name),
-                                .get_value = FieldNameFormatter.structField(.get_value, name, field.name),
+                                .get_length = std.zig.fmtId(utils.NameGenerator.structField(.get_length, name, field.name)),
+                                .get_value = std.zig.fmtId(utils.NameGenerator.structField(.get_value, name, field.name)),
                             });
                         }
                     },
@@ -125,7 +113,7 @@ pub fn generateStruct(
                             \\return data;
                         , .{
                             .arr = @typeName(field_info.type),
-                            .get = FieldNameFormatter.structField(.get, name, field.name),
+                            .get = std.zig.fmtId(utils.NameGenerator.structField(.get, name, field.name)),
                         });
                     },
                     else => @panic("no"),
@@ -168,7 +156,7 @@ pub fn generateStruct(
                                 \\B.{[set]s}(self.handle, @intCast(i32, @ptrToInt(value)), @intCast(i32, value.len));
                                 \\return value;
                             , .{
-                                .set = FieldNameFormatter.structField(.set, name, field.name),
+                                .set = std.zig.fmtId(utils.NameGenerator.structField(.set, name, field.name)),
                             });
                         }
                     },
@@ -181,7 +169,7 @@ pub fn generateStruct(
                             \\B.{[set]s}(self.handle, @intCast(i32, @ptrToInt(&value)));
                         , .{
                             .arr = @typeName(field_info.type),
-                            .set = FieldNameFormatter.structField(.set, name, field.name),
+                            .set = std.zig.fmtId(utils.NameGenerator.structField(.set, name, field.name)),
                         });
                     },
                     else => @panic("no"),
