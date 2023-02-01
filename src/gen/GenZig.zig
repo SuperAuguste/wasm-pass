@@ -193,24 +193,5 @@ pub fn generateStruct(
         }
     }
 
-    // for (@"struct".fields) |field| {
-    //     switch (field.type) {
-    //         .identifier => |id| {
-    //             if (std.mem.eql(u8, id.value, "string")) {
-    //                 try writer.print("extern fn wasm_pass__{s}_get_{s}_length(handle: Handle) i32;\n", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
-    //                 try writer.print("extern fn wasm_pass__{s}_get_{s}_value(handle: Handle, ptr: i32) void;\n", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
-
-    //                 if (!field.is_read_only) try writer.print("extern fn wasm_pass__{s}_set_{s}(handle: Handle, ptr: i32, len: i32) void;\n", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
-    //             }
-    //         },
-    //         .array => {
-    //             try writer.print("extern fn wasm_pass__{s}_get_{s}(handle: Handle, ptr: i32) void;\n", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
-
-    //             if (!field.is_read_only) try writer.print("extern fn wasm_pass__{s}_set_{s}(handle: Handle, ptr: i32) void;\n", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
-    //         },
-    //         else => @panic("no"),
-    //     }
-    // }
-
     try writer.writeAll("};\n");
 }

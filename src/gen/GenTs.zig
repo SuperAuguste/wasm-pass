@@ -113,14 +113,6 @@ pub fn generateStruct(
 
         switch (field_info.options.get) {
             .yes => |_| {
-                // if (get_opts.errors) |errs| {
-                //     try writer.print("pub const Get{s}Error = error{{", .{utils.SnakeToPascal{ .str = field.name }});
-                //     inline for (comptime std.meta.fields(errs)) |err| {
-                //         try writer.print("{s},", .{std.zig.fmtId(err.name)});
-                //     }
-                //     try writer.writeAll("};");
-                // }
-
                 switch (@typeInfo(field_info.type)) {
                     .Pointer => |_| {
                         if (field_info.type == []const u8) {
@@ -129,9 +121,11 @@ pub fn generateStruct(
                                 \\    return manager.get<{s}>(handle)!.{s}.length;
                                 \\}},
                                 \\{[get_value]s}(handle: Handle, ptr: number): void {{
-                                \\    new Uint8Array(memory.buffer).set(manager.get<{s}>(handle)!.{s}, ptr);
+                                \\    new Uint8Array(memory.buffer).set(new TextEncoder().encode(manager.get<{[name]s}>(handle)!.{[field_name]s}), ptr);
                                 \\}},
                             , .{
+                                .name = name,
+                                .field_name = field.name,
                                 .get_length = FieldNameFormatter.structField(.get_length, name, field.name),
                                 .get_value = FieldNameFormatter.structField(.get_value, name, field.name),
                             });
@@ -140,10 +134,11 @@ pub fn generateStruct(
                     .Array => |_| {
                         try func_writer.print(
                             \\{[get]s}(handle: Handle, ptr: number): void {{
-                            \\    new Uint8Array(memory.buffer).set(manager.get<{s}>(handle)!.{s}, ptr);
+                            \\    new Uint8Array(memory.buffer).set(manager.get<{[name]s}>(handle)!.{[field_name]s}, ptr);
                             \\}},
                         , .{
-                            // .arr = @typeName(field_info.type),
+                            .name = name,
+                            .field_name = field.name,
                             .get = FieldNameFormatter.structField(.get, name, field.name),
                         });
                     },
@@ -155,23 +150,4 @@ pub fn generateStruct(
             .no => {},
         }
     }
-
-    // for (@"struct".fields) |field| {
-    //     switch (field.type) {
-    //         .identifier => |id| {
-    //             if (std.mem.eql(u8, id.value, "string")) {
-    //                 try writer.print("extern fn wasm_pass__{s}_get_{s}_length(handle: Handle) i32;\n", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
-    //                 try writer.print("extern fn wasm_pass__{s}_get_{s}_value(handle: Handle, ptr: i32) void;\n", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
-
-    //                 if (!field.is_read_only) try writer.print("extern fn wasm_pass__{s}_set_{s}(handle: Handle, ptr: i32, len: i32) void;\n", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
-    //             }
-    //         },
-    //         .array => {
-    //             try writer.print("extern fn wasm_pass__{s}_get_{s}(handle: Handle, ptr: i32) void;\n", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
-
-    //             if (!field.is_read_only) try writer.print("extern fn wasm_pass__{s}_set_{s}(handle: Handle, ptr: i32) void;\n", .{ std.zig.fmtId(@"struct".name), std.zig.fmtId(field.name) });
-    //         },
-    //         else => @panic("no"),
-    //     }
-    // }
 }
